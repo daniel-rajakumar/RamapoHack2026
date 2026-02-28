@@ -2,15 +2,30 @@ import http from "node:http";
 import { pathToFileURL } from "node:url";
 import cors from "cors";
 import express from "express";
+import helmet from "helmet";
 import { Server } from "socket.io";
 import { HOST, PORT } from "./config.js";
 import { RoomStore } from "./roomStore.js";
+import { allowSocketRequest, corsOriginCheck } from "./security.js";
 import { setupSocketHandlers } from "./socketHandlers.js";
 import type { ClientToServerEvents, ServerToClientEvents } from "./types.js";
 
 export function createGameServer() {
   const app = express();
-  app.use(cors({ origin: "*" }));
+  app.disable("x-powered-by");
+  app.use(
+    helmet({
+      contentSecurityPolicy: false,
+      crossOriginEmbedderPolicy: false
+    })
+  );
+  app.use(
+    cors({
+      origin: corsOriginCheck,
+      methods: ["GET", "POST"],
+      optionsSuccessStatus: 204
+    })
+  );
 
   app.get("/health", (_req, res) => {
     res.json({ ok: true });
@@ -19,8 +34,10 @@ export function createGameServer() {
   const httpServer = http.createServer(app);
   const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer, {
     cors: {
-      origin: "*"
-    }
+      origin: corsOriginCheck,
+      methods: ["GET", "POST"]
+    },
+    allowRequest: allowSocketRequest
   });
 
   const roomStore = new RoomStore();

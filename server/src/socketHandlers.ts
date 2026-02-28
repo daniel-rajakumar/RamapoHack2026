@@ -1,5 +1,6 @@
 import type { Server } from "socket.io";
 import type { Socket } from "socket.io";
+import { CONTROL_EVENT_MAX_PER_WINDOW, CONTROL_EVENT_WINDOW_MS } from "./config.js";
 import { endMatch, clearRoomIntervals, emitStateUpdate, startMatch } from "./matchLoop.js";
 import { toPlayerViews, RoomStore } from "./roomStore.js";
 import { getTimeRemainingMs } from "./shoot.js";
@@ -8,6 +9,7 @@ import { normalizeRoomCode, validateName, validateShootPayload } from "./validat
 
 type IoServer = Server<ClientToServerEvents, ServerToClientEvents>;
 type GameSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
+type ControlWindow = { windowStartMs: number; count: number };
 
 function emitError(io: IoServer, socketId: string, code: ErrorCode): void {
   io.to(socketId).emit("error_event", {
@@ -28,6 +30,21 @@ function emitRoomUpdate(io: IoServer, roomCode: string, roomStore: RoomStore): v
     hostId: room.hostSocketId,
     started: room.started
   });
+}
+
+function consumeControlEvent(controlWindows: Map<string, ControlWindow>, socketId: string, now = Date.now()): boolean {
+  const state = controlWindows.get(socketId);
+  if (!state || now - state.windowStartMs >= CONTROL_EVENT_WINDOW_MS) {
+    controlWindows.set(socketId, { windowStartMs: now, count: 1 });
+    return true;
+  }
+
+  if (state.count >= CONTROL_EVENT_MAX_PER_WINDOW) {
+    return false;
+  }
+
+  state.count += 1;
+  return true;
 }
 
 function detachSocketFromCurrentRoom(io: IoServer, roomStore: RoomStore, socket: GameSocket): void {
@@ -58,8 +75,16 @@ function detachSocketFromCurrentRoom(io: IoServer, roomStore: RoomStore, socket:
 }
 
 export function setupSocketHandlers(io: IoServer, roomStore: RoomStore): void {
+  const controlWindows = new Map<string, ControlWindow>();
+
   io.on("connection", (socket) => {
     socket.on("create_room", (payload, cb) => {
+      if (!consumeControlEvent(controlWindows, socket.id)) {
+        emitError(io, socket.id, "RATE_LIMITED");
+        cb?.({ error: "RATE_LIMITED" });
+        return;
+      }
+
       const name = validateName(payload?.name);
       if (!name) {
         emitError(io, socket.id, "NAME_INVALID");
@@ -75,6 +100,12 @@ export function setupSocketHandlers(io: IoServer, roomStore: RoomStore): void {
     });
 
     socket.on("join_room", (payload, cb) => {
+      if (!consumeControlEvent(controlWindows, socket.id)) {
+        emitError(io, socket.id, "RATE_LIMITED");
+        cb?.({ ok: false, error: "RATE_LIMITED" });
+        return;
+      }
+
       const roomCode = normalizeRoomCode(payload?.roomCode);
       const name = validateName(payload?.name);
       if (!roomCode || !name) {
@@ -110,6 +141,12 @@ export function setupSocketHandlers(io: IoServer, roomStore: RoomStore): void {
     });
 
     socket.on("start_match", (payload, cb) => {
+      if (!consumeControlEvent(controlWindows, socket.id)) {
+        emitError(io, socket.id, "RATE_LIMITED");
+        cb?.({ ok: false, error: "RATE_LIMITED" });
+        return;
+      }
+
       const roomCode = normalizeRoomCode(payload?.roomCode);
       if (!roomCode) {
         emitError(io, socket.id, "ROOM_NOT_FOUND");
@@ -191,6 +228,7 @@ export function setupSocketHandlers(io: IoServer, roomStore: RoomStore): void {
     });
 
     socket.on("disconnect", () => {
+      controlWindows.delete(socket.id);
       const room = roomStore.removeSocket(socket.id);
       if (!room) {
         return;

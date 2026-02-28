@@ -31,10 +31,23 @@ function renderPlayers(container: HTMLUListElement, players: PlayerView[], selfI
     const li = document.createElement("li");
     const isSelf = player.id === selfId;
     li.className = `player-item${isSelf ? " self" : ""}`;
-    li.innerHTML = `
-      <span class="player-name">${player.name}${isSelf ? " <em>(You)</em>" : ""}</span>
-      <span class="player-score">${player.score}</span>
-    `;
+
+    const nameSpan = document.createElement("span");
+    nameSpan.className = "player-name";
+    nameSpan.textContent = player.name;
+
+    if (isSelf) {
+      const selfTag = document.createElement("em");
+      selfTag.textContent = " (You)";
+      nameSpan.appendChild(selfTag);
+    }
+
+    const scoreSpan = document.createElement("span");
+    scoreSpan.className = "player-score";
+    scoreSpan.textContent = String(player.score);
+
+    li.appendChild(nameSpan);
+    li.appendChild(scoreSpan);
     container.appendChild(li);
   }
 }

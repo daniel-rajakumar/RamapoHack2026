@@ -31,6 +31,11 @@ npm run dev
 
 Open `http://localhost:5173`.
 
+## Security-relevant environment variables
+- `CORS_ORIGINS`: comma-separated allowlist of browser origins that can call the API/socket.
+  - Example: `CORS_ORIGINS=https://game.example.com,https://staging.example.com`
+  - For local dev, defaults allow `localhost:5173`, `127.0.0.1:5173`, `localhost:4173`, `127.0.0.1:4173`.
+
 ## LAN demo
 1. Start server on Laptop A (`npm run dev` in `/server`).
 2. Find Laptop A IP (for example `192.168.1.42`).

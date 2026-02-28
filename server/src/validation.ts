@@ -2,13 +2,17 @@ import { ROOM_CODE_LENGTH } from "./config.js";
 import type { ErrorCode, ShootReq } from "./types.js";
 
 const ROOM_CODE_REGEX = /^[A-Z0-9]+$/;
+const SAFE_NAME_REGEX = /^[A-Za-z0-9 _.-]+$/;
 
 export function validateName(rawName: unknown): string | null {
   if (typeof rawName !== "string") {
     return null;
   }
-  const trimmed = rawName.trim();
+  const trimmed = rawName.trim().replace(/\s+/g, " ");
   if (!trimmed || trimmed.length > 20) {
+    return null;
+  }
+  if (!SAFE_NAME_REGEX.test(trimmed)) {
     return null;
   }
   return trimmed;
