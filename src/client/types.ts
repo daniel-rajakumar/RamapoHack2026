@@ -5,6 +5,7 @@ export type ErrorCode =
   | "MATCH_NOT_STARTED"
   | "MATCH_ENDED"
   | "INVALID_SHOT"
+  | "INVALID_SETTINGS"
   | "INVALID_SIGNAL"
   | "RATE_LIMITED"
   | "NOT_HOST"
@@ -13,11 +14,13 @@ export type ErrorCode =
 
 export type PlayerView = { id: string; name: string; score: number };
 export type TargetView = { id: number; x: number; y: number; r: number };
+export type AimView = { id: string; x: number; y: number };
 
 export type CreateRoomReq = { name: string };
 export type JoinRoomReq = { roomCode: string; name: string };
 export type ShootReq = { roomCode: string; x: number; y: number; t?: number };
-export type StartMatchReq = { roomCode: string };
+export type AimUpdateReq = { roomCode: string; x: number; y: number };
+export type StartMatchReq = { roomCode: string; durationMs?: number; twoGuns?: boolean };
 export type WebRtcSignalReq = {
   roomCode: string;
   targetId: string;
@@ -35,12 +38,20 @@ export type JoinRoomAck =
   | { ok: false; error: ErrorCode };
 export type StartMatchAck = { ok: true } | { ok: false; error: ErrorCode };
 
-export type RoomUpdate = { roomCode: string; players: PlayerView[]; hostId: string; started: boolean };
-export type MatchStart = { roomCode: string; startTime: number; durationMs: number };
+export type RoomUpdate = {
+  roomCode: string;
+  players: PlayerView[];
+  hostId: string;
+  started: boolean;
+  durationMs: number;
+  twoGuns: boolean;
+};
+export type MatchStart = { roomCode: string; startTime: number; durationMs: number; twoGuns: boolean; countdownMs: number };
 export type StateUpdate = {
   roomCode: string;
   players: PlayerView[];
   targets: TargetView[];
+  aims: AimView[];
   timeRemainingMs: number;
 };
 export type ShotResult = { roomCode: string; shooterId: string; hit: boolean; hitTargetId?: number };
@@ -57,6 +68,14 @@ export type WebRtcSignalEvent = {
   fromId: string;
   signal: WebRtcSignal;
 };
+export type MusicSync = {
+  track: "menu";
+  startedAtMs: number;
+  serverNowMs: number;
+};
+export type MusicSyncProbeAck = {
+  serverNowMs: number;
+};
 
 export interface ServerToClientEvents {
   room_update: (payload: RoomUpdate) => void;
@@ -66,6 +85,7 @@ export interface ServerToClientEvents {
   match_end: (payload: MatchEnd) => void;
   error_event: (payload: ErrorEvent) => void;
   webrtc_signal: (payload: WebRtcSignalEvent) => void;
+  music_sync: (payload: MusicSync) => void;
 }
 
 export interface ClientToServerEvents {
@@ -73,5 +93,7 @@ export interface ClientToServerEvents {
   join_room: (payload: JoinRoomReq, cb?: (response: JoinRoomAck) => void) => void;
   start_match: (payload: StartMatchReq, cb?: (response: StartMatchAck) => void) => void;
   shoot: (payload: ShootReq) => void;
+  aim_update: (payload: AimUpdateReq) => void;
   webrtc_signal: (payload: WebRtcSignalReq) => void;
+  music_sync_probe: (cb?: (payload: MusicSyncProbeAck) => void) => void;
 }

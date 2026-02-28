@@ -1,7 +1,7 @@
 import { ROOM_CODE_LENGTH } from "./config";
-import type { ErrorCode, ShootReq, WebRtcSignalReq } from "./types";
+import type { AimUpdateReq, ErrorCode, ShootReq, StartMatchReq, WebRtcSignalReq } from "./types";
 
-const ROOM_CODE_REGEX = /^[A-Z0-9]+$/;
+const ROOM_CODE_REGEX = /^[A-Z]+$/;
 const SAFE_NAME_REGEX = /^[A-Za-z0-9 _.-]+$/;
 
 export function validateName(rawName: unknown): string | null {
@@ -60,6 +60,75 @@ export function validateShootPayload(rawPayload: unknown):
       x: payload.x,
       y: payload.y,
       t: payload.t
+    }
+  };
+}
+
+export function validateAimPayload(rawPayload: unknown):
+  | { ok: true; data: AimUpdateReq }
+  | { ok: false; code: ErrorCode } {
+  if (!rawPayload || typeof rawPayload !== "object") {
+    return { ok: false, code: "INVALID_SHOT" };
+  }
+
+  const payload = rawPayload as Partial<AimUpdateReq>;
+  const roomCode = normalizeRoomCode(payload.roomCode);
+  if (!roomCode) {
+    return { ok: false, code: "INVALID_SHOT" };
+  }
+
+  if (typeof payload.x !== "number" || !Number.isFinite(payload.x)) {
+    return { ok: false, code: "INVALID_SHOT" };
+  }
+  if (typeof payload.y !== "number" || !Number.isFinite(payload.y)) {
+    return { ok: false, code: "INVALID_SHOT" };
+  }
+
+  return {
+    ok: true,
+    data: {
+      roomCode,
+      x: payload.x,
+      y: payload.y
+    }
+  };
+}
+
+export function validateStartMatchPayload(rawPayload: unknown):
+  | { ok: true; data: StartMatchReq }
+  | { ok: false; code: ErrorCode } {
+  if (!rawPayload || typeof rawPayload !== "object") {
+    return { ok: false, code: "ROOM_NOT_FOUND" };
+  }
+
+  const payload = rawPayload as Partial<StartMatchReq>;
+  const roomCode = normalizeRoomCode(payload.roomCode);
+  if (!roomCode) {
+    return { ok: false, code: "ROOM_NOT_FOUND" };
+  }
+
+  if (payload.durationMs !== undefined) {
+    if (
+      typeof payload.durationMs !== "number" ||
+      !Number.isFinite(payload.durationMs) ||
+      !Number.isInteger(payload.durationMs) ||
+      payload.durationMs < 15_000 ||
+      payload.durationMs > 300_000
+    ) {
+      return { ok: false, code: "INVALID_SETTINGS" };
+    }
+  }
+
+  if (payload.twoGuns !== undefined && typeof payload.twoGuns !== "boolean") {
+    return { ok: false, code: "INVALID_SETTINGS" };
+  }
+
+  return {
+    ok: true,
+    data: {
+      roomCode,
+      durationMs: payload.durationMs,
+      twoGuns: payload.twoGuns
     }
   };
 }

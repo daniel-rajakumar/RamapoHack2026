@@ -62,7 +62,8 @@ describe("socket integration flow", () => {
     if ("error" in createAck) {
       throw new Error(`create_room failed: ${createAck.error}`);
     }
-    expect(createAck.roomCode).toHaveLength(6);
+    expect(createAck.roomCode).toHaveLength(1);
+    expect(createAck.roomCode).toMatch(/^[A-Z]$/);
 
     const joinAck = await new Promise<JoinRoomAck>((resolve) => {
       clientB.emit("join_room", { roomCode: createAck.roomCode, name: "Bob" }, (ack: JoinRoomAck) => resolve(ack));
@@ -82,9 +83,14 @@ describe("socket integration flow", () => {
       throw new Error(`start_match failed: ${startAck.error}`);
     }
 
-    await matchStartPromise;
+    const matchStart = await matchStartPromise;
     const state = (await waitForEvent(clientA, "state_update")) as StateUpdate;
     expect(state.targets.length).toBeGreaterThan(0);
+
+    const waitMs = Math.max(0, matchStart.startTime - Date.now()) + 50;
+    if (waitMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, waitMs));
+    }
 
     clientA.emit("shoot", {
       roomCode: createAck.roomCode,

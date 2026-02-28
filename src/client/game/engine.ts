@@ -11,6 +11,8 @@ export class GameEngine {
 
   private readonly crosshair: THREE.Mesh;
 
+  private readonly opponentCrosshair: THREE.Mesh;
+
   private readonly targetManager: TargetMeshManager;
 
   private animationFrameId = 0;
@@ -46,6 +48,16 @@ export class GameEngine {
     });
     this.crosshair = new THREE.Mesh(crosshairGeometry, crosshairMaterial);
     this.scene.add(this.crosshair);
+
+    const opponentCrosshairMaterial = new THREE.MeshBasicMaterial({
+      color: 0xff5e6c,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.9
+    });
+    this.opponentCrosshair = new THREE.Mesh(crosshairGeometry, opponentCrosshairMaterial);
+    this.opponentCrosshair.visible = false;
+    this.scene.add(this.opponentCrosshair);
 
     this.targetManager = new TargetMeshManager(
       this.scene,
@@ -103,6 +115,15 @@ export class GameEngine {
   setCrosshair(x: number, y: number): void {
     const point = this.normalizedToScene(x, y);
     this.crosshair.position.set(point.x, point.y, 0.1);
+  }
+
+  setOpponentCrosshair(x: number, y: number): void {
+    const point = this.normalizedToScene(x, y);
+    this.opponentCrosshair.position.set(point.x, point.y, 0.1);
+  }
+
+  setOpponentCrosshairVisible(visible: boolean): void {
+    this.opponentCrosshair.visible = visible;
   }
 
   syncTargets(targets: TargetView[]): void {

@@ -1,9 +1,12 @@
 import { CLIENT_SHOT_COOLDOWN_MS, type InputMode, WEBCAM_HEIGHT, WEBCAM_WIDTH } from "./config";
+import { ElevenLabsVoiceAnnouncer } from "./audio/elevenlabsVoice";
+import { LocalGameAudio } from "./audio/localGameAudio";
 import { GameEngine } from "./game/engine";
 import { MouseInputController } from "./input/mouse";
 import { createGameSocket } from "./net/socket";
 import type { MatchEnd, PlayerView, WebRtcSignal } from "./types";
 import { createUI } from "./ui/ui";
+import { EyeInputController } from "./vision/eyes";
 import { HandInputController } from "./vision/hands";
 
 function clamp01(value: number): number {
@@ -39,12 +42,19 @@ export function mountGame(appRoot: HTMLElement): () => void {
   let selfPlayerId = "";
   let engine: GameEngine | null = null;
   let handController: HandInputController | null = null;
+  let eyeController: EyeInputController | null = null;
   let mouseController: MouseInputController | null = null;
   let inputMode: InputMode = "hand";
   let handAvailable = false;
+  let eyeAvailable = false;
   let isPlaying = false;
   let isHost = false;
+  let twoGunsEnabled = false;
+  let selectedMatchDurationSec = 60;
   let currentAim = { x: 0.5, y: 0.5 };
+  let lastAimSentAt = 0;
+  let lastAimSentX = 0.5;
+  let lastAimSentY = 0.5;
   let mediaStream: MediaStream | null = null;
   let peerConnection: RTCPeerConnection | null = null;
   let remoteStream: MediaStream | null = null;
@@ -52,12 +62,31 @@ export function mountGame(appRoot: HTMLElement): () => void {
   let pendingRemoteIce: RTCIceCandidateInit[] = [];
   let makingOffer = false;
   let cameraTestInFlight = false;
+  let cameraAutoConnectInFlight = false;
   let disposed = false;
+  const voiceAnnouncer = new ElevenLabsVoiceAnnouncer();
+  const localAudio = new LocalGameAudio();
+  let knownPlayerIds = new Set<string>();
+  let roomPlayersInitialized = false;
+  let matchStartsAtMs = 0;
+  let startCountdownIntervalId = 0;
+  let lastStartCountdownSpoken: number | null = null;
+  let lastCountdownSecondSpoken: number | null = null;
+  let lastMusicSyncStartedAtMs = 0;
+  let lastMusicSyncServerNowMs = 0;
+  let estimatedOneWayLatencyMs = 0;
+  let musicSyncProbeIntervalId = 0;
 
   ui.setRemoteCameraVisible(false);
   ui.setRemoteCameraStatus("Waiting for opponent to join...");
   ui.setLocalCameraVisible(false);
   ui.setLocalCameraStatus("Camera not connected yet.");
+  ui.setTwoGunsEnabled(twoGunsEnabled);
+  ui.setTwoGunsEditable(false);
+  ui.setMatchDurationSeconds(selectedMatchDurationSec);
+  ui.setMatchDurationEditable(false);
+  ui.setStartCountdown(null);
+  localAudio.setMenuMusicEnabled(true);
 
   function clearRemoteStream(): void {
     remoteStream = null;
@@ -68,11 +97,15 @@ export function mountGame(appRoot: HTMLElement): () => void {
 
   function clearLocalPreview(): void {
     ui.getLocalWaitingVideoElement().srcObject = null;
+    ui.getLocalPlayingVideoElement().srcObject = null;
     ui.setLocalCameraVisible(false);
   }
 
   async function setLocalPreview(stream: MediaStream): Promise<void> {
-    await attachStream(ui.getLocalWaitingVideoElement(), stream);
+    await Promise.all([
+      attachStream(ui.getLocalWaitingVideoElement(), stream),
+      attachStream(ui.getLocalPlayingVideoElement(), stream)
+    ]);
     ui.setLocalCameraVisible(true);
     ui.setLocalCameraStatus("Your camera connected.");
   }
@@ -88,11 +121,41 @@ export function mountGame(appRoot: HTMLElement): () => void {
   }
 
   async function ensureMediaStream(): Promise<MediaStream> {
-    if (!mediaStream) {
+    const hasLiveTrack = mediaStream?.getVideoTracks().some((track) => track.readyState === "live") ?? false;
+    if (!hasLiveTrack) {
+      if (mediaStream) {
+        for (const track of mediaStream.getTracks()) {
+          track.stop();
+        }
+      }
       mediaStream = await requestWebcamStream();
     }
-    await setLocalPreview(mediaStream);
-    return mediaStream;
+    const stream = mediaStream;
+    if (!stream) {
+      throw new Error("Camera stream unavailable");
+    }
+    await setLocalPreview(stream);
+    return stream;
+  }
+
+  async function autoConnectCamera(): Promise<void> {
+    if (cameraAutoConnectInFlight) {
+      return;
+    }
+    if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+      ui.setLocalCameraStatus("Camera API not available in this browser.");
+      return;
+    }
+
+    cameraAutoConnectInFlight = true;
+    try {
+      await ensureMediaStream();
+    } catch {
+      ui.setLocalCameraStatus("Allow camera access to auto-connect.");
+      ui.setLocalCameraVisible(false);
+    } finally {
+      cameraAutoConnectInFlight = false;
+    }
   }
 
   function syncLocalTracksToPeer(): void {
@@ -256,30 +319,79 @@ export function mountGame(appRoot: HTMLElement): () => void {
   function setAim(x: number, y: number): void {
     currentAim = { x: clamp01(x), y: clamp01(y) };
     engine?.setCrosshair(currentAim.x, currentAim.y);
+    sendAimUpdate(currentAim.x, currentAim.y);
+  }
+
+  function sendAimUpdate(x: number, y: number, force = false): void {
+    if (!roomCode) {
+      return;
+    }
+
+    const aimX = clamp01(x);
+    const aimY = clamp01(y);
+    const now = Date.now();
+    const movedEnough = Math.abs(aimX - lastAimSentX) > 0.004 || Math.abs(aimY - lastAimSentY) > 0.004;
+    if (!force && now - lastAimSentAt < 40 && !movedEnough) {
+      return;
+    }
+
+    lastAimSentAt = now;
+    lastAimSentX = aimX;
+    lastAimSentY = aimY;
+    socket.emit("aim_update", {
+      roomCode,
+      x: aimX,
+      y: aimY
+    });
   }
 
   function sendShoot(x = currentAim.x, y = currentAim.y): void {
     if (!roomCode) {
       return;
     }
+    if (matchStartsAtMs && Date.now() < matchStartsAtMs) {
+      return;
+    }
+    sendAimUpdate(x, y, true);
     socket.emit("shoot", {
       roomCode,
       x: clamp01(x),
       y: clamp01(y),
       t: Date.now()
     });
+    localAudio.playAttack();
   }
 
   function applyInputMode(requestedMode: InputMode): void {
-    const mode = requestedMode === "hand" && !handAvailable ? "mouse" : requestedMode;
+    let mode: InputMode = requestedMode;
+    if (requestedMode === "hand" && !handAvailable) {
+      mode = eyeAvailable ? "eye" : "mouse";
+    } else if (requestedMode === "eye" && !eyeAvailable) {
+      mode = handAvailable ? "hand" : "mouse";
+    }
+
     inputMode = mode;
     ui.setInputMode(mode);
 
     handController?.setEnabled(mode === "hand");
+    eyeController?.setEnabled(mode === "eye");
     mouseController?.setEnabled(mode === "mouse");
 
+    if (mode !== requestedMode) {
+      if (requestedMode === "eye") {
+        ui.setTrackingStatus(mode === "hand" ? "Eye unavailable. Hand mode active" : "Eye unavailable. Mouse mode active");
+      } else if (requestedMode === "hand") {
+        ui.setTrackingStatus(mode === "eye" ? "Hand unavailable. Eye mode active" : "Hand unavailable. Mouse mode active");
+      }
+      return;
+    }
+
     if (mode === "mouse") {
-      ui.setTrackingStatus(handAvailable ? "Mouse mode active" : "Hand unavailable. Mouse mode active");
+      if (!handAvailable && !eyeAvailable) {
+        ui.setTrackingStatus("Hand/Eye unavailable. Mouse mode active");
+      } else {
+        ui.setTrackingStatus("Mouse mode active");
+      }
     }
   }
 
@@ -317,6 +429,7 @@ export function mountGame(appRoot: HTMLElement): () => void {
     } catch {
       ui.setTrackingStatus("Camera unavailable. Mouse mode active");
       handAvailable = false;
+      eyeAvailable = false;
       applyInputMode("mouse");
       return;
     }
@@ -345,6 +458,33 @@ export function mountGame(appRoot: HTMLElement): () => void {
       handAvailable = await handController.init();
       if (handAvailable && !disposed) {
         handController.start(video);
+      }
+    }
+
+    if (!eyeController) {
+      eyeController = new EyeInputController({
+        onAim: (x, y) => {
+          if (inputMode !== "eye") {
+            return;
+          }
+          setAim(x, y);
+        },
+        onShoot: (x, y) => {
+          if (inputMode !== "eye") {
+            return;
+          }
+          sendShoot(x, y);
+        },
+        onStatus: (message) => {
+          if (inputMode === "eye") {
+            ui.setTrackingStatus(message);
+          }
+        }
+      });
+
+      eyeAvailable = await eyeController.init();
+      if (eyeAvailable && !disposed) {
+        eyeController.start(video);
       }
     }
 
@@ -381,6 +521,114 @@ export function mountGame(appRoot: HTMLElement): () => void {
     return players.find((player) => player.id !== selfPlayerId);
   }
 
+  function greetNewPlayers(players: PlayerView[]): void {
+    if (!roomPlayersInitialized) {
+      roomPlayersInitialized = true;
+      knownPlayerIds = new Set(players.map((player) => player.id));
+
+      // On first full snapshot, only greet self to avoid greeting everyone in an existing room.
+      const self = players.find((player) => player.id === selfPlayerId);
+      if (self) {
+        voiceAnnouncer.speak(`Hello ${self.name}, welcome to the room`);
+      }
+      return;
+    }
+
+    for (const player of players) {
+      if (!knownPlayerIds.has(player.id)) {
+        voiceAnnouncer.speak(`Hello ${player.name}, welcome to the room`);
+      }
+    }
+
+    knownPlayerIds = new Set(players.map((player) => player.id));
+  }
+
+  function maybeSpeakCountdown(timeRemainingMs: number): void {
+    const secondsRemaining = Math.ceil(Math.max(0, timeRemainingMs) / 1000);
+    if (secondsRemaining < 1 || secondsRemaining > 3) {
+      return;
+    }
+    if (lastCountdownSecondSpoken === secondsRemaining) {
+      return;
+    }
+    lastCountdownSecondSpoken = secondsRemaining;
+    voiceAnnouncer.speak(String(secondsRemaining));
+  }
+
+  function clearStartCountdown(): void {
+    if (startCountdownIntervalId) {
+      window.clearInterval(startCountdownIntervalId);
+      startCountdownIntervalId = 0;
+    }
+    matchStartsAtMs = 0;
+    lastStartCountdownSpoken = null;
+    ui.setStartCountdown(null);
+  }
+
+  function updateStartCountdown(): void {
+    if (!matchStartsAtMs) {
+      ui.setStartCountdown(null);
+      return;
+    }
+
+    const secondsRemaining = Math.ceil((matchStartsAtMs - Date.now()) / 1000);
+    if (secondsRemaining > 0) {
+      ui.setStartCountdown(secondsRemaining);
+      if (lastStartCountdownSpoken !== secondsRemaining) {
+        lastStartCountdownSpoken = secondsRemaining;
+        voiceAnnouncer.speak(String(secondsRemaining));
+      }
+      return;
+    }
+
+    clearStartCountdown();
+  }
+
+  function startMatchCountdown(startTime: number): void {
+    clearStartCountdown();
+    matchStartsAtMs = startTime;
+    updateStartCountdown();
+    startCountdownIntervalId = window.setInterval(updateStartCountdown, 100);
+  }
+
+  function clearMusicProbe(): void {
+    if (musicSyncProbeIntervalId) {
+      window.clearInterval(musicSyncProbeIntervalId);
+      musicSyncProbeIntervalId = 0;
+    }
+  }
+
+  function resyncMenuMusicClock(): void {
+    if (!lastMusicSyncStartedAtMs || !lastMusicSyncServerNowMs) {
+      return;
+    }
+    localAudio.syncMenuMusicClock(lastMusicSyncStartedAtMs, lastMusicSyncServerNowMs, estimatedOneWayLatencyMs);
+  }
+
+  function probeMusicLatency(): void {
+    if (!socket.connected) {
+      return;
+    }
+
+    const sentAtMs = Date.now();
+    socket.emit("music_sync_probe", (ack) => {
+      if (!ack || typeof ack.serverNowMs !== "number") {
+        return;
+      }
+
+      const rttMs = Math.max(0, Date.now() - sentAtMs);
+      const halfRttMs = rttMs / 2;
+      estimatedOneWayLatencyMs = estimatedOneWayLatencyMs === 0 ? halfRttMs : estimatedOneWayLatencyMs * 0.8 + halfRttMs * 0.2;
+      resyncMenuMusicClock();
+    });
+  }
+
+  function startMusicProbe(): void {
+    clearMusicProbe();
+    probeMusicLatency();
+    musicSyncProbeIntervalId = window.setInterval(probeMusicLatency, 2_500);
+  }
+
   async function reconcilePeerForRoom(players: PlayerView[]): Promise<void> {
     const opponent = getOpponent(players);
     if (!opponent) {
@@ -397,6 +645,8 @@ export function mountGame(appRoot: HTMLElement): () => void {
 
     await ensurePeerSession(opponent.id);
   }
+
+  void autoConnectCamera();
 
   ui.onCreateRoom((name) => {
     if (!name) {
@@ -417,6 +667,7 @@ export function mountGame(appRoot: HTMLElement): () => void {
       ui.setStatus("Room created. Waiting for player 2.");
       ui.showWaiting();
       ui.setWaitingControls({ isHost: true, canStart: false, started: false, playerCount: 1 });
+      void autoConnectCamera();
     });
   });
 
@@ -439,11 +690,20 @@ export function mountGame(appRoot: HTMLElement): () => void {
       ui.setStatus("Joined room. Waiting for host to start.");
       ui.showWaiting();
       ui.setWaitingControls({ isHost: false, canStart: false, started: false, playerCount: 1 });
+      void autoConnectCamera();
     });
   });
 
   ui.onInputModeChange((mode) => {
     applyInputMode(mode);
+  });
+
+  ui.onMatchDurationChange((seconds) => {
+    selectedMatchDurationSec = seconds;
+  });
+
+  ui.onTwoGunsChange((enabled) => {
+    twoGunsEnabled = enabled;
   });
 
   ui.onTestCamera(() => {
@@ -455,7 +715,7 @@ export function mountGame(appRoot: HTMLElement): () => void {
       return;
     }
 
-    socket.emit("start_match", { roomCode }, (ack) => {
+    socket.emit("start_match", { roomCode, durationMs: selectedMatchDurationSec * 1000, twoGuns: twoGunsEnabled }, (ack) => {
       if (!ack.ok) {
         ui.setStatus(`Start failed: ${ack.error}`);
         return;
@@ -466,12 +726,32 @@ export function mountGame(appRoot: HTMLElement): () => void {
 
   socket.on("connect", () => {
     ui.setStatus("Connected to server");
+    void autoConnectCamera();
+    startMusicProbe();
+  });
+
+  socket.on("music_sync", (payload) => {
+    if (payload.track !== "menu") {
+      return;
+    }
+    lastMusicSyncStartedAtMs = payload.startedAtMs;
+    lastMusicSyncServerNowMs = payload.serverNowMs;
+    resyncMenuMusicClock();
+    probeMusicLatency();
   });
 
   socket.on("disconnect", () => {
     ui.setStatus("Disconnected from server");
     teardownPeerConnection();
     ui.setRemoteCameraStatus("Disconnected from opponent camera.");
+    isPlaying = false;
+    engine?.setOpponentCrosshairVisible(false);
+    clearMusicProbe();
+    clearStartCountdown();
+    localAudio.setMenuMusicEnabled(true);
+    knownPlayerIds.clear();
+    roomPlayersInitialized = false;
+    lastCountdownSecondSpoken = null;
   });
 
   socket.on("error_event", (payload) => {
@@ -482,8 +762,24 @@ export function mountGame(appRoot: HTMLElement): () => void {
   });
 
   socket.on("room_update", (payload) => {
+    const previousRoomCode = roomCode;
     roomCode = payload.roomCode;
+    if (roomCode !== previousRoomCode) {
+      knownPlayerIds = new Set<string>();
+      roomPlayersInitialized = false;
+    }
+    greetNewPlayers(payload.players);
     isHost = payload.hostId === selfPlayerId;
+    if (!isHost || payload.started) {
+      twoGunsEnabled = payload.twoGuns;
+    }
+    ui.setTwoGunsEnabled(twoGunsEnabled);
+    ui.setTwoGunsEditable(isHost && !payload.started);
+    if (!isHost || payload.started) {
+      selectedMatchDurationSec = Math.round(payload.durationMs / 1000);
+    }
+    ui.setMatchDurationSeconds(selectedMatchDurationSec);
+    ui.setMatchDurationEditable(isHost && !payload.started);
     ui.setRoomCode(payload.roomCode);
     ui.setWaitingPlayers(payload.players, selfPlayerId);
     ui.setPlayingPlayers(payload.players, selfPlayerId);
@@ -505,7 +801,11 @@ export function mountGame(appRoot: HTMLElement): () => void {
     }
 
     if (!isPlaying) {
+      clearStartCountdown();
+      localAudio.setMenuMusicEnabled(true);
       ui.showWaiting();
+      engine?.setOpponentCrosshairVisible(false);
+      void autoConnectCamera();
     }
 
     void reconcilePeerForRoom(payload.players);
@@ -570,23 +870,44 @@ export function mountGame(appRoot: HTMLElement): () => void {
     });
   });
 
-  socket.on("match_start", async () => {
+  socket.on("match_start", async (payload) => {
     isPlaying = true;
+    twoGunsEnabled = payload.twoGuns;
+    lastCountdownSecondSpoken = null;
+    voiceAnnouncer.prefetch(["3", "2", "1", "Game over"]);
+    startMatchCountdown(payload.startTime);
+    localAudio.setMenuMusicEnabled(true);
+    ui.setTwoGunsEnabled(twoGunsEnabled);
     ui.showPlaying();
-    ui.setTimer(60_000);
+    ui.setTimer(payload.durationMs);
     await ensureRuntimeReady();
+    engine?.setOpponentCrosshairVisible(false);
+    sendAimUpdate(currentAim.x, currentAim.y, true);
   });
 
   socket.on("state_update", (payload) => {
     ui.setPlayingPlayers(payload.players, selfPlayerId);
     ui.setTimer(payload.timeRemainingMs);
+    maybeSpeakCountdown(payload.timeRemainingMs);
     engine?.syncTargets(payload.targets);
+    const opponentAim = payload.aims.find((aim) => aim.id !== selfPlayerId);
+    if (opponentAim) {
+      engine?.setOpponentCrosshair(opponentAim.x, opponentAim.y);
+      engine?.setOpponentCrosshairVisible(true);
+    } else {
+      engine?.setOpponentCrosshairVisible(false);
+    }
   });
 
   socket.on("match_end", (payload: MatchEnd) => {
     isPlaying = false;
+    clearStartCountdown();
+    lastCountdownSecondSpoken = null;
+    voiceAnnouncer.speak("Game over");
+    localAudio.setMenuMusicEnabled(true);
     ui.showResults(payload, selfPlayerId);
     ui.setTimer(0);
+    engine?.setOpponentCrosshairVisible(false);
     engine?.clearTargets();
   });
 
@@ -608,8 +929,11 @@ export function mountGame(appRoot: HTMLElement): () => void {
   };
 
   const beforeUnloadHandler = () => {
+    clearMusicProbe();
+    clearStartCountdown();
     releaseMedia();
     handController?.stop();
+    eyeController?.stop();
     mouseController?.dispose();
     engine?.dispose();
   };
@@ -626,5 +950,7 @@ export function mountGame(appRoot: HTMLElement): () => void {
     beforeUnloadHandler();
     socket.removeAllListeners();
     socket.disconnect();
+    voiceAnnouncer.dispose();
+    localAudio.dispose();
   };
 }

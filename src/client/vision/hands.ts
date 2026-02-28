@@ -17,6 +17,31 @@ export interface HandInputCallbacks {
   onStatus: (message: string) => void;
 }
 
+let tfliteInfoLogFilterInstalled = false;
+
+function shouldSuppressTfliteInfoLog(args: unknown[]): boolean {
+  if (args.length === 0) {
+    return false;
+  }
+  const message = typeof args[0] === "string" ? args[0] : String(args[0]);
+  return message.includes("Created TensorFlow Lite XNNPACK delegate for CPU");
+}
+
+function installTfliteInfoLogFilter(): void {
+  if (tfliteInfoLogFilterInstalled) {
+    return;
+  }
+  tfliteInfoLogFilterInstalled = true;
+
+  const originalConsoleError = console.error;
+  console.error = (...args: unknown[]) => {
+    if (shouldSuppressTfliteInfoLog(args)) {
+      return;
+    }
+    originalConsoleError(...args);
+  };
+}
+
 function clamp01(value: number): number {
   return Math.max(0, Math.min(1, value));
 }
@@ -64,17 +89,19 @@ export class HandInputController {
   }
 
   async init(): Promise<boolean> {
+    installTfliteInfoLogFilter();
+
     try {
       this.handLandmarker = await this.createLandmarker(LOCAL_MEDIAPIPE_WASM_ROOT, LOCAL_HAND_MODEL_PATH);
-      this.callbacks.onStatus("Tracking: ready");
+      this.callbacks.onStatus("ready");
       return true;
     } catch {
       try {
         this.handLandmarker = await this.createLandmarker(CDN_MEDIAPIPE_WASM_ROOT, CDN_HAND_MODEL_PATH);
-        this.callbacks.onStatus("Tracking: using CDN model");
+        this.callbacks.onStatus("cdn");
         return true;
       } catch {
-        this.callbacks.onStatus("Tracking unavailable");
+        this.callbacks.onStatus("unavailable");
         this.handLandmarker = null;
         return false;
       }
@@ -110,7 +137,7 @@ export class HandInputController {
         if (landmarks && landmarks[4] && landmarks[8]) {
           this.lastSeenAt = Date.now();
 
-          const rawX = landmarks[8].x;
+          const rawX = 1 - landmarks[8].x;
           const rawY = landmarks[8].y;
 
           this.smoothX += (rawX - this.smoothX) * AIM_SMOOTH_ALPHA;
@@ -160,13 +187,13 @@ export class HandInputController {
 
     const sinceSeen = now - this.lastSeenAt;
     if (this.lastSeenAt === 0 || sinceSeen > TRACKING_STALE_BAD_MS) {
-      this.callbacks.onStatus("Tracking: lost");
+      this.callbacks.onStatus("lost");
       return;
     }
     if (sinceSeen > TRACKING_STALE_WARN_MS) {
-      this.callbacks.onStatus("Tracking: weak");
+      this.callbacks.onStatus("weak");
       return;
     }
-    this.callbacks.onStatus("Tracking: good");
+    this.callbacks.onStatus("good");
   }
 }

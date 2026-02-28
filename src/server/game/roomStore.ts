@@ -34,10 +34,12 @@ export class RoomStore {
       started: false,
       startTime: 0,
       durationMs: MATCH_DURATION_MS,
+      twoGuns: false,
       targets: createInitialTargets(0, 0),
       nextTargetId: 1,
       lastShotAtByPlayer: new Map(),
       shotWindowCountByPlayer: new Map(),
+      aimByPlayer: new Map([[hostSocketId, { x: 0.5, y: 0.5 }]]),
       pendingShots: []
     };
 
@@ -66,6 +68,7 @@ export class RoomStore {
     }
 
     room.players.set(socketId, { id: socketId, name, score: 0 });
+    room.aimByPlayer.set(socketId, { x: 0.5, y: 0.5 });
     this.socketToRoomCode.set(socketId, roomCode);
     return { ok: true, room };
   }
@@ -85,6 +88,7 @@ export class RoomStore {
     room.players.delete(socketId);
     room.lastShotAtByPlayer.delete(socketId);
     room.shotWindowCountByPlayer.delete(socketId);
+    room.aimByPlayer.delete(socketId);
     room.pendingShots = room.pendingShots.filter((shot) => shot.shooterId !== socketId);
 
     if (room.hostSocketId === socketId) {
@@ -114,6 +118,9 @@ export class RoomStore {
     }
     room.lastShotAtByPlayer.clear();
     room.shotWindowCountByPlayer.clear();
+    for (const playerId of room.players.keys()) {
+      room.aimByPlayer.set(playerId, { x: 0.5, y: 0.5 });
+    }
     room.pendingShots = [];
   }
 }

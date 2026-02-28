@@ -28,6 +28,9 @@ Open [http://localhost:3000](http://localhost:3000).
   - In non-production, private/LAN IPv4 origins are also allowed (useful for 2 laptops on the same network).
 - `NEXT_PUBLIC_SERVER_URL` (optional): explicit socket target URL for client.
   - Leave unset for same-origin operation.
+- `ELEVENLABS_API_KEY` (optional): enables server-side ElevenLabs TTS for room join greetings, match countdown, and "Game over" voice line.
+- `ELEVENLABS_VOICE_ID` (optional): ElevenLabs voice ID to use with TTS.
+- `ELEVENLABS_MODEL_ID` (optional): ElevenLabs model ID (defaults to `eleven_multilingual_v2`).
 
 ## Build and start
 ```bash
@@ -59,4 +62,5 @@ Optional hardening after deploy:
 
 ## Input modes
 - `Hand`: MediaPipe hand tracking with pinch shoot.
+- `Eye`: MediaPipe face + eye tracking with blink shoot.
 - `Mouse`: Manual fallback mode using pointer aim + click shoot.

@@ -25,14 +25,16 @@ export const ALLOWED_ORIGINS = (
 
 export const ALLOW_ANY_ORIGIN = ALLOWED_ORIGINS.includes("*");
 
-export const ROOM_CODE_LENGTH = 6;
-export const ROOM_CODE_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+export const ROOM_CODE_LENGTH = 1;
+export const ROOM_CODE_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
 export const MATCH_DURATION_MS = 60_000;
+export const MATCH_START_COUNTDOWN_MS = 3_000;
 export const TARGET_COUNT = 5;
 export const TARGET_RADIUS = 0.05;
 export const TARGET_X_RANGE: readonly [number, number] = [0.15, 0.85];
 export const TARGET_Y_RANGE: readonly [number, number] = [0.15, 0.85];
+export const TWO_GUN_SPREAD = 0.08;
 
 export const SERVER_SHOT_COOLDOWN_MS = 200;
 export const SERVER_RATE_LIMIT_PER_SEC = 8;

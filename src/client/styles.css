@@ -239,19 +239,73 @@ input {
   text-shadow: 0 1px 0 var(--ink-shadow);
 }
 
-.camera-test-video {
+.camera-test-stage {
   display: none;
+  position: relative;
   width: min(100%, 380px);
   aspect-ratio: 4 / 3;
   margin-top: 0.55rem;
   border-radius: 12px;
   border: 2px solid rgba(255, 224, 150, 0.34);
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+  background: #0b0b0b;
+}
+
+.camera-test-stage.active {
+  display: block;
+}
+
+.camera-test-video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  margin-top: 0;
+  border-radius: 0;
+  border: 0;
+  box-shadow: none;
   object-fit: cover;
 }
 
-.camera-test-video.active {
-  display: block;
+.camera-test-crosshair {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 32px;
+  height: 32px;
+  transform: translate(-50%, -50%);
+  border: 2px solid rgba(255, 244, 200, 0.95);
+  border-radius: 999px;
+  box-shadow:
+    0 0 0 2px rgba(56, 32, 16, 0.65),
+    0 0 10px rgba(255, 210, 120, 0.55);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.camera-test-crosshair::before,
+.camera-test-crosshair::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(255, 244, 200, 0.95);
+}
+
+.camera-test-crosshair::before {
+  width: 2px;
+  height: 16px;
+}
+
+.camera-test-crosshair::after {
+  width: 16px;
+  height: 2px;
+}
+
+.camera-test-crosshair.active {
+  opacity: 1;
 }
 
 .waiting-actions {
@@ -337,6 +391,30 @@ input {
   pointer-events: none;
   border-radius: 12px;
   box-shadow: inset 0 0 0 1px rgba(255, 222, 150, 0.25);
+}
+
+.start-countdown {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%) scale(0.8);
+  min-width: 3.8rem;
+  text-align: center;
+  font-family: "Bungee", cursive;
+  font-size: clamp(2.5rem, 8vw, 5rem);
+  color: #ffe7a5;
+  text-shadow:
+    0 0 10px rgba(255, 224, 146, 0.45),
+    0 3px 0 rgba(72, 42, 19, 0.9),
+    0 12px 20px rgba(0, 0, 0, 0.4);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+
+.start-countdown.active {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
 }
 
 .webcam,

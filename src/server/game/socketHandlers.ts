@@ -5,7 +5,15 @@ import { endMatch, clearRoomIntervals, emitStateUpdate, startMatch } from "./mat
 import { toPlayerViews, RoomStore } from "./roomStore";
 import { getTimeRemainingMs } from "./shoot";
 import type { ClientToServerEvents, ErrorCode, ServerToClientEvents } from "./types";
-import { normalizeRoomCode, validateName, validateShootPayload, validateWebRtcSignalPayload } from "./validation";
+import {
+  clamp01,
+  validateAimPayload,
+  normalizeRoomCode,
+  validateName,
+  validateShootPayload,
+  validateStartMatchPayload,
+  validateWebRtcSignalPayload
+} from "./validation";
 
 type IoServer = Server<ClientToServerEvents, ServerToClientEvents>;
 type GameSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
@@ -28,7 +36,9 @@ function emitRoomUpdate(io: IoServer, roomCode: string, roomStore: RoomStore): v
     roomCode,
     players: toPlayerViews(room),
     hostId: room.hostSocketId,
-    started: room.started
+    started: room.started,
+    durationMs: room.durationMs,
+    twoGuns: room.twoGuns
   });
 }
 
@@ -76,8 +86,19 @@ function detachSocketFromCurrentRoom(io: IoServer, roomStore: RoomStore, socket:
 
 export function setupSocketHandlers(io: IoServer, roomStore: RoomStore): void {
   const controlWindows = new Map<string, ControlWindow>();
+  const menuMusicStartedAtMs = Date.now();
 
   io.on("connection", (socket) => {
+    socket.emit("music_sync", {
+      track: "menu",
+      startedAtMs: menuMusicStartedAtMs,
+      serverNowMs: Date.now()
+    });
+
+    socket.on("music_sync_probe", (cb) => {
+      cb?.({ serverNowMs: Date.now() });
+    });
+
     socket.on("create_room", (payload, cb) => {
       if (!consumeControlEvent(controlWindows, socket.id)) {
         emitError(io, socket.id, "RATE_LIMITED");
@@ -147,12 +168,13 @@ export function setupSocketHandlers(io: IoServer, roomStore: RoomStore): void {
         return;
       }
 
-      const roomCode = normalizeRoomCode(payload?.roomCode);
-      if (!roomCode) {
-        emitError(io, socket.id, "ROOM_NOT_FOUND");
-        cb?.({ ok: false, error: "ROOM_NOT_FOUND" });
+      const validation = validateStartMatchPayload(payload);
+      if (!validation.ok) {
+        emitError(io, socket.id, validation.code);
+        cb?.({ ok: false, error: validation.code });
         return;
       }
+      const roomCode = validation.data.roomCode;
 
       const room = roomStore.getRoom(roomCode);
       if (!room) {
@@ -185,6 +207,13 @@ export function setupSocketHandlers(io: IoServer, roomStore: RoomStore): void {
         return;
       }
 
+      if (validation.data.durationMs !== undefined) {
+        room.durationMs = validation.data.durationMs;
+      }
+      if (validation.data.twoGuns !== undefined) {
+        room.twoGuns = validation.data.twoGuns;
+      }
+
       startMatch(io, room);
       emitRoomUpdate(io, roomCode, roomStore);
       cb?.({ ok: true });
@@ -212,6 +241,10 @@ export function setupSocketHandlers(io: IoServer, roomStore: RoomStore): void {
         emitError(io, socket.id, "MATCH_NOT_STARTED");
         return;
       }
+      if (Date.now() < room.startTime) {
+        emitError(io, socket.id, "MATCH_NOT_STARTED");
+        return;
+      }
 
       if (getTimeRemainingMs(room, Date.now()) <= 0) {
         emitError(io, socket.id, "MATCH_ENDED");
@@ -224,6 +257,27 @@ export function setupSocketHandlers(io: IoServer, roomStore: RoomStore): void {
         y: validation.data.y,
         receivedAt: Date.now(),
         t: validation.data.t
+      });
+      room.aimByPlayer.set(socket.id, {
+        x: clamp01(validation.data.x),
+        y: clamp01(validation.data.y)
+      });
+    });
+
+    socket.on("aim_update", (payload) => {
+      const validation = validateAimPayload(payload);
+      if (!validation.ok) {
+        return;
+      }
+
+      const room = roomStore.getRoom(validation.data.roomCode);
+      if (!room || !room.players.has(socket.id)) {
+        return;
+      }
+
+      room.aimByPlayer.set(socket.id, {
+        x: clamp01(validation.data.x),
+        y: clamp01(validation.data.y)
       });
     });
 

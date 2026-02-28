@@ -11,6 +11,22 @@ import { allowSocketRequest, corsOriginCheck } from "./src/server/game/security"
 import { setupSocketHandlers } from "./src/server/game/socketHandlers";
 import type { ClientToServerEvents, ServerToClientEvents } from "./src/server/game/types";
 
+const MAX_TTS_TEXT_LENGTH = 120;
+const DEFAULT_ELEVENLABS_MODEL_ID = "eleven_multilingual_v2";
+
+function sanitizeTtsText(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const text = value.replace(/\s+/g, " ").trim();
+  if (!text || text.length > MAX_TTS_TEXT_LENGTH) {
+    return null;
+  }
+
+  return text;
+}
+
 function getNetworkHosts(): string[] {
   const hosts = new Set<string>();
   const interfaces = os.networkInterfaces();
@@ -53,9 +69,64 @@ async function startServer(): Promise<void> {
       optionsSuccessStatus: 204
     })
   );
+  app.use(
+    express.json({
+      limit: "16kb"
+    })
+  );
 
   app.get("/health", (_req, res) => {
     res.json({ ok: true });
+  });
+
+  app.post("/api/voice/tts", async (req, res) => {
+    const apiKey = process.env.ELEVENLABS_API_KEY;
+    const voiceId = process.env.ELEVENLABS_VOICE_ID;
+    if (!apiKey || !voiceId) {
+      res.status(503).json({ error: "VOICE_NOT_CONFIGURED" });
+      return;
+    }
+
+    const text = sanitizeTtsText(req.body?.text);
+    if (!text) {
+      res.status(400).json({ error: "INVALID_TEXT" });
+      return;
+    }
+
+    try {
+      const elevenLabsResponse = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "audio/mpeg",
+          "xi-api-key": apiKey
+        },
+        body: JSON.stringify({
+          text,
+          model_id: process.env.ELEVENLABS_MODEL_ID ?? DEFAULT_ELEVENLABS_MODEL_ID,
+          voice_settings: {
+            stability: 0.45,
+            similarity_boost: 0.75
+          }
+        })
+      });
+
+      if (!elevenLabsResponse.ok) {
+        const details = (await elevenLabsResponse.text()).slice(0, 200);
+        res.status(502).json({
+          error: "ELEVENLABS_UPSTREAM_ERROR",
+          details
+        });
+        return;
+      }
+
+      const audioBuffer = Buffer.from(await elevenLabsResponse.arrayBuffer());
+      res.setHeader("Content-Type", "audio/mpeg");
+      res.setHeader("Cache-Control", "no-store");
+      res.send(audioBuffer);
+    } catch {
+      res.status(502).json({ error: "VOICE_UNAVAILABLE" });
+    }
   });
 
   app.all("*", (req, res) => {

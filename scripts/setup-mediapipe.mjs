@@ -9,9 +9,12 @@ const root = path.resolve(__dirname, "..");
 const publicMediapipeDir = path.join(root, "public", "mediapipe");
 const wasmSrcDir = path.join(root, "node_modules", "@mediapipe", "tasks-vision", "wasm");
 const wasmDestDir = path.join(publicMediapipeDir, "wasm");
-const modelDest = path.join(publicMediapipeDir, "hand_landmarker.task");
-const modelUrl =
+const handModelDest = path.join(publicMediapipeDir, "hand_landmarker.task");
+const handModelUrl =
   "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task";
+const faceModelDest = path.join(publicMediapipeDir, "face_landmarker.task");
+const faceModelUrl =
+  "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
 
 async function copyDirectory(src, dest) {
   await fs.mkdir(dest, { recursive: true });
@@ -61,7 +64,7 @@ async function downloadFile(url, dest) {
 async function main() {
   await fs.mkdir(publicMediapipeDir, { recursive: true });
   await copyDirectory(wasmSrcDir, wasmDestDir);
-  await downloadFile(modelUrl, modelDest);
+  await Promise.all([downloadFile(handModelUrl, handModelDest), downloadFile(faceModelUrl, faceModelDest)]);
   console.log("MediaPipe assets prepared in public/mediapipe");
 }
 

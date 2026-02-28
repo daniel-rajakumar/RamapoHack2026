@@ -1,6 +1,6 @@
 import type { Server } from "socket.io";
-import { BROADCAST_MS, MATCH_DURATION_MS, SIM_TICK_MS, TARGET_COUNT } from "./config";
-import { processQueuedShot, getTimeRemainingMs } from "./shoot";
+import { BROADCAST_MS, MATCH_START_COUNTDOWN_MS, SIM_TICK_MS, TARGET_COUNT, TWO_GUN_SPREAD } from "./config";
+import { processQueuedShot, processQueuedTwoGunShot, getTimeRemainingMs } from "./shoot";
 import { createInitialTargets, toTargetViews } from "./targets";
 import { toPlayerViews } from "./roomStore";
 import type { ClientToServerEvents, Room, ServerToClientEvents } from "./types";
@@ -20,10 +20,15 @@ export function clearRoomIntervals(room: Room): void {
 
 export function emitStateUpdate(io: IoServer, room: Room): void {
   const timeRemainingMs = room.started ? getTimeRemainingMs(room, Date.now()) : 0;
+  const aims = Array.from(room.players.keys()).map((playerId) => {
+    const aim = room.aimByPlayer.get(playerId) ?? { x: 0.5, y: 0.5 };
+    return { id: playerId, x: aim.x, y: aim.y };
+  });
   io.to(room.roomCode).emit("state_update", {
     roomCode: room.roomCode,
     players: toPlayerViews(room),
     targets: toTargetViews(room.targets),
+    aims,
     timeRemainingMs
   });
 }
@@ -76,6 +81,9 @@ function runSimulationTick(io: IoServer, room: Room): void {
   if (!room.started) {
     return;
   }
+  if (Date.now() < room.startTime) {
+    return;
+  }
 
   while (room.pendingShots.length > 0) {
     const shot = room.pendingShots.shift();
@@ -83,26 +91,32 @@ function runSimulationTick(io: IoServer, room: Room): void {
       break;
     }
 
-    const result = processQueuedShot(room, shot, Date.now());
-    if (!result.accepted) {
-      if (result.errorCode) {
-        io.to(result.shooterId).emit("error_event", {
-          code: result.errorCode,
-          message: `Shot rejected: ${result.errorCode}`
-        });
+    const now = Date.now();
+    const results = room.twoGuns
+      ? processQueuedTwoGunShot(room, shot, TWO_GUN_SPREAD, now)
+      : [processQueuedShot(room, shot, now)];
+
+    for (const result of results) {
+      if (!result.accepted) {
+        if (result.errorCode) {
+          io.to(result.shooterId).emit("error_event", {
+            code: result.errorCode,
+            message: `Shot rejected: ${result.errorCode}`
+          });
+        }
+        continue;
       }
-      continue;
-    }
 
-    io.to(room.roomCode).emit("shot_result", {
-      roomCode: room.roomCode,
-      shooterId: result.shooterId,
-      hit: result.hit,
-      hitTargetId: result.hitTargetId
-    });
+      io.to(room.roomCode).emit("shot_result", {
+        roomCode: room.roomCode,
+        shooterId: result.shooterId,
+        hit: result.hit,
+        hitTargetId: result.hitTargetId
+      });
 
-    if (result.hit) {
-      emitStateUpdate(io, room);
+      if (result.hit) {
+        emitStateUpdate(io, room);
+      }
     }
   }
 
@@ -117,13 +131,15 @@ export function startMatch(io: IoServer, room: Room): void {
   }
 
   room.started = true;
-  room.startTime = Date.now();
-  room.durationMs = MATCH_DURATION_MS;
+  room.startTime = Date.now() + MATCH_START_COUNTDOWN_MS;
   room.targets = createInitialTargets(TARGET_COUNT, room.nextTargetId);
   room.nextTargetId += TARGET_COUNT;
 
   for (const player of room.players.values()) {
     player.score = 0;
+  }
+  for (const playerId of room.players.keys()) {
+    room.aimByPlayer.set(playerId, { x: 0.5, y: 0.5 });
   }
   room.lastShotAtByPlayer.clear();
   room.shotWindowCountByPlayer.clear();
@@ -132,7 +148,9 @@ export function startMatch(io: IoServer, room: Room): void {
   io.to(room.roomCode).emit("match_start", {
     roomCode: room.roomCode,
     startTime: room.startTime,
-    durationMs: room.durationMs
+    durationMs: room.durationMs,
+    twoGuns: room.twoGuns,
+    countdownMs: MATCH_START_COUNTDOWN_MS
   });
 
   emitStateUpdate(io, room);
