@@ -22,6 +22,7 @@ export type JoinRoomReq = { roomCode: string; name: string };
 export type ShootReq = { roomCode: string; x: number; y: number; t?: number };
 export type AimUpdateReq = { roomCode: string; x: number; y: number };
 export type StartMatchReq = { roomCode: string; durationMs?: number; inputMode?: InputModeSetting };
+export type GiveHostReq = { roomCode: string };
 export type WebRtcSignalReq = {
   roomCode: string;
   targetId: string;
@@ -38,6 +39,8 @@ export type JoinRoomAck =
   | { ok: true; roomCode: string; playerId: string }
   | { ok: false; error: ErrorCode };
 export type StartMatchAck = { ok: true } | { ok: false; error: ErrorCode };
+export type LeaveRoomAck = { ok: true } | { ok: false; error: ErrorCode };
+export type GiveHostAck = { ok: true } | { ok: false; error: ErrorCode };
 
 export type RoomUpdate = {
   roomCode: string;
@@ -104,6 +107,8 @@ export interface ClientToServerEvents {
   create_room: (payload: CreateRoomReq, cb?: (response: CreateRoomAck) => void) => void;
   join_room: (payload: JoinRoomReq, cb?: (response: JoinRoomAck) => void) => void;
   start_match: (payload: StartMatchReq, cb?: (response: StartMatchAck) => void) => void;
+  give_host: (payload: GiveHostReq, cb?: (response: GiveHostAck) => void) => void;
+  leave_room: (cb?: (response: LeaveRoomAck) => void) => void;
   shoot: (payload: ShootReq) => void;
   aim_update: (payload: AimUpdateReq) => void;
   webrtc_signal: (payload: WebRtcSignalReq) => void;

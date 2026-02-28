@@ -1,0 +1,97 @@
+<svg width="1280" height="720" viewBox="0 0 1280 720" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Gesture Shooter game thumbnail</title>
+  <desc id="desc">Stylized thumbnail with Gesture Shooter title, hand and eye tracking highlights, and arena duel scene.</desc>
+
+  <defs>
+    <linearGradient id="bgGrad" x1="0" y1="0" x2="1280" y2="720" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0D1C2E"/>
+      <stop offset="0.52" stop-color="#122F47"/>
+      <stop offset="1" stop-color="#1E4C62"/>
+    </linearGradient>
+    <radialGradient id="flareLeft" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(260 210) rotate(30) scale(420 300)">
+      <stop stop-color="#6BE7FF" stop-opacity="0.44"/>
+      <stop offset="1" stop-color="#6BE7FF" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="flareRight" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(1020 220) rotate(-25) scale(430 320)">
+      <stop stop-color="#FFD974" stop-opacity="0.42"/>
+      <stop offset="1" stop-color="#FFD974" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="floorGrad" x1="640" y1="410" x2="640" y2="720" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#121922" stop-opacity="0"/>
+      <stop offset="1" stop-color="#0A0E14" stop-opacity="0.9"/>
+    </linearGradient>
+    <linearGradient id="titleBar" x1="640" y1="76" x2="640" y2="234" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF4BE"/>
+      <stop offset="0.5" stop-color="#F1C96B"/>
+      <stop offset="1" stop-color="#B7792F"/>
+    </linearGradient>
+    <linearGradient id="buttonBlue" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#7EF4FF"/>
+      <stop offset="1" stop-color="#219BC3"/>
+    </linearGradient>
+    <linearGradient id="buttonGold" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#FFE7A6"/>
+      <stop offset="1" stop-color="#D8962D"/>
+    </linearGradient>
+    <filter id="softGlow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="10" result="b"/>
+      <feMerge>
+        <feMergeNode in="b"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="6" flood-color="#000" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+
+  <rect width="1280" height="720" fill="url(#bgGrad)"/>
+  <rect width="1280" height="720" fill="url(#flareLeft)"/>
+  <rect width="1280" height="720" fill="url(#flareRight)"/>
+
+  <g opacity="0.15">
+    <path d="M0 355C206 280 328 272 526 355C738 446 920 436 1280 308V720H0V355Z" fill="#79D8FF"/>
+    <path d="M0 405C258 358 390 362 624 442C860 521 1020 518 1280 396V720H0V405Z" fill="#F1B54A"/>
+  </g>
+
+  <rect x="115" y="72" width="1050" height="172" rx="32" fill="#5C3B25" fill-opacity="0.65"/>
+  <rect x="128" y="84" width="1024" height="148" rx="27" fill="url(#titleBar)" stroke="#5E3A1C" stroke-width="6" filter="url(#shadow)"/>
+  <text x="640" y="152" text-anchor="middle" fill="#3A2310" font-size="74" font-weight="900" font-family="Bungee, Impact, Arial Black, sans-serif" letter-spacing="3">GESTURE SHOOTER</text>
+  <text x="640" y="198" text-anchor="middle" fill="#5A3C1E" font-size="30" font-weight="800" font-family="Nunito, Arial, sans-serif" letter-spacing="2">HAND + EYE TRACKING DUEL</text>
+
+  <g filter="url(#softGlow)">
+    <circle cx="362" cy="473" r="150" fill="#4FE6FF" fill-opacity="0.22"/>
+    <circle cx="920" cy="472" r="150" fill="#FFD26F" fill-opacity="0.22"/>
+  </g>
+
+  <g>
+    <rect x="160" y="305" width="410" height="290" rx="28" fill="#0D2437" fill-opacity="0.72" stroke="#4FDFFF" stroke-width="4"/>
+    <rect x="710" y="305" width="410" height="290" rx="28" fill="#2F2416" fill-opacity="0.68" stroke="#F2C667" stroke-width="4"/>
+  </g>
+
+  <g>
+    <path d="M325 498L340 421C342 405 356 392 372 392C388 392 401 404 402 420L406 469L430 435C439 422 456 417 470 423C484 430 491 446 485 460L447 542C441 556 428 566 413 568L376 572C360 574 345 568 335 555L322 537C313 526 311 511 318 499L325 498Z" fill="#82F3FF" stroke="#CFFBFF" stroke-width="6"/>
+    <circle cx="438" cy="437" r="12" fill="#E5FEFF"/>
+    <path d="M813 468C813 430 844 399 882 399C918 399 948 428 951 464C951 465 951 466 951 467C951 469 951 470 951 471C948 507 918 536 882 536C844 536 813 505 813 468Z" fill="#FFE2A2" stroke="#FFF2D1" stroke-width="6"/>
+    <circle cx="882" cy="468" r="44" fill="#3B2B18"/>
+    <circle cx="882" cy="468" r="20" fill="#F4B959"/>
+    <circle cx="892" cy="458" r="8" fill="#FFF8E3"/>
+  </g>
+
+  <g>
+    <circle cx="640" cy="452" r="82" fill="#111923" stroke="#8DE9FF" stroke-width="4"/>
+    <circle cx="640" cy="452" r="44" fill="none" stroke="#F3CC73" stroke-width="4" stroke-dasharray="7 10"/>
+    <path d="M640 352V398M740 452H694M640 552V506M540 452H586" stroke="#CBEFFF" stroke-width="7" stroke-linecap="round"/>
+    <circle cx="640" cy="452" r="8" fill="#E9F8FF"/>
+  </g>
+
+  <g>
+    <rect x="212" y="613" width="300" height="62" rx="16" fill="url(#buttonBlue)" stroke="#D4FAFF" stroke-width="3"/>
+    <text x="362" y="653" text-anchor="middle" fill="#083247" font-size="30" font-weight="900" font-family="Nunito, Arial, sans-serif" letter-spacing="1">PLAYER 1 HAND</text>
+
+    <rect x="768" y="613" width="300" height="62" rx="16" fill="url(#buttonGold)" stroke="#FFF0CB" stroke-width="3"/>
+    <text x="918" y="653" text-anchor="middle" fill="#573716" font-size="30" font-weight="900" font-family="Nunito, Arial, sans-serif" letter-spacing="1">PLAYER 2 EYE</text>
+  </g>
+
+  <rect x="0" y="410" width="1280" height="310" fill="url(#floorGrad)"/>
+</svg>

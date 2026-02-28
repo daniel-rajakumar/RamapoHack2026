@@ -8,6 +8,7 @@ import type { ClientToServerEvents, ErrorCode, ServerToClientEvents } from "./ty
 import {
   clamp01,
   validateAimPayload,
+  validateGiveHostPayload,
   normalizeRoomCode,
   validateName,
   validateShootPayload,
@@ -216,6 +217,62 @@ export function setupSocketHandlers(io: IoServer, roomStore: RoomStore): void {
 
       startMatch(io, room);
       emitRoomUpdate(io, roomCode, roomStore);
+      cb?.({ ok: true });
+    });
+
+    socket.on("give_host", (payload, cb) => {
+      if (!consumeControlEvent(controlWindows, socket.id)) {
+        emitError(io, socket.id, "RATE_LIMITED");
+        cb?.({ ok: false, error: "RATE_LIMITED" });
+        return;
+      }
+
+      const validation = validateGiveHostPayload(payload);
+      if (!validation.ok) {
+        emitError(io, socket.id, validation.code);
+        cb?.({ ok: false, error: validation.code });
+        return;
+      }
+
+      const room = roomStore.getRoom(validation.data.roomCode);
+      if (!room || !room.players.has(socket.id)) {
+        emitError(io, socket.id, "ROOM_NOT_FOUND");
+        cb?.({ ok: false, error: "ROOM_NOT_FOUND" });
+        return;
+      }
+
+      if (room.hostSocketId !== socket.id) {
+        emitError(io, socket.id, "NOT_HOST");
+        cb?.({ ok: false, error: "NOT_HOST" });
+        return;
+      }
+
+      if (room.started) {
+        emitError(io, socket.id, "MATCH_ALREADY_STARTED");
+        cb?.({ ok: false, error: "MATCH_ALREADY_STARTED" });
+        return;
+      }
+
+      const opponentId = Array.from(room.players.keys()).find((playerId) => playerId !== socket.id);
+      if (!opponentId) {
+        emitError(io, socket.id, "NOT_ENOUGH_PLAYERS");
+        cb?.({ ok: false, error: "NOT_ENOUGH_PLAYERS" });
+        return;
+      }
+
+      room.hostSocketId = opponentId;
+      emitRoomUpdate(io, room.roomCode, roomStore);
+      cb?.({ ok: true });
+    });
+
+    socket.on("leave_room", (cb) => {
+      if (!consumeControlEvent(controlWindows, socket.id)) {
+        emitError(io, socket.id, "RATE_LIMITED");
+        cb?.({ ok: false, error: "RATE_LIMITED" });
+        return;
+      }
+
+      detachSocketFromCurrentRoom(io, roomStore, socket);
       cb?.({ ok: true });
     });
 

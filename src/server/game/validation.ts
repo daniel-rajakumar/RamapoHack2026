@@ -1,5 +1,5 @@
 import { ROOM_CODE_LENGTH } from "./config";
-import type { AimUpdateReq, ErrorCode, ShootReq, StartMatchReq, WebRtcSignalReq } from "./types";
+import type { AimUpdateReq, ErrorCode, GiveHostReq, ShootReq, StartMatchReq, WebRtcSignalReq } from "./types";
 
 const ROOM_CODE_REGEX = /^[A-Z]+$/;
 const SAFE_NAME_REGEX = /^[A-Za-z0-9 _.-]+$/;
@@ -131,6 +131,27 @@ export function validateStartMatchPayload(rawPayload: unknown):
       roomCode,
       durationMs: payload.durationMs,
       inputMode: payload.inputMode
+    }
+  };
+}
+
+export function validateGiveHostPayload(rawPayload: unknown):
+  | { ok: true; data: GiveHostReq }
+  | { ok: false; code: ErrorCode } {
+  if (!rawPayload || typeof rawPayload !== "object") {
+    return { ok: false, code: "ROOM_NOT_FOUND" };
+  }
+
+  const payload = rawPayload as Partial<GiveHostReq>;
+  const roomCode = normalizeRoomCode(payload.roomCode);
+  if (!roomCode) {
+    return { ok: false, code: "ROOM_NOT_FOUND" };
+  }
+
+  return {
+    ok: true,
+    data: {
+      roomCode
     }
   };
 }

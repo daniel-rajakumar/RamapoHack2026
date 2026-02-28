@@ -73,6 +73,15 @@ export function endMatch(
     reason
   });
 
+  io.to(room.roomCode).emit("room_update", {
+    roomCode: room.roomCode,
+    players: finalPlayers,
+    hostId: room.hostSocketId,
+    started: room.started,
+    durationMs: room.durationMs,
+    inputMode: room.inputMode
+  });
+
   room.pendingShots = [];
   room.targets = [];
 }

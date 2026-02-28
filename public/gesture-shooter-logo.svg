@@ -1,0 +1,58 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Gesture Shooter logo</title>
+  <desc id="desc">Round emblem logo with crosshair, hand and eye motif, and GS monogram.</desc>
+
+  <defs>
+    <linearGradient id="ringGrad" x1="182" y1="182" x2="842" y2="842" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#7AF2FF"/>
+      <stop offset="1" stop-color="#2A93CF"/>
+    </linearGradient>
+    <linearGradient id="accentGrad" x1="300" y1="300" x2="760" y2="760" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFE39E"/>
+      <stop offset="1" stop-color="#D58A28"/>
+    </linearGradient>
+    <radialGradient id="coreGlow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(512 512) rotate(90) scale(320)">
+      <stop stop-color="#2C4E72"/>
+      <stop offset="1" stop-color="#0C1826"/>
+    </radialGradient>
+    <filter id="drop" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="16" stdDeviation="16" flood-color="#000" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+
+  <rect width="1024" height="1024" rx="220" fill="transparent"/>
+
+  <g filter="url(#drop)">
+    <circle cx="512" cy="512" r="364" fill="#0F243A"/>
+    <circle cx="512" cy="512" r="328" fill="url(#coreGlow)"/>
+    <circle cx="512" cy="512" r="364" stroke="url(#ringGrad)" stroke-width="22"/>
+    <circle cx="512" cy="512" r="286" stroke="#96EBFF" stroke-opacity="0.35" stroke-width="4" stroke-dasharray="12 14"/>
+  </g>
+
+  <g stroke="#BEEFFF" stroke-width="16" stroke-linecap="round">
+    <path d="M512 212V300"/>
+    <path d="M812 512H724"/>
+    <path d="M512 812V724"/>
+    <path d="M212 512H300"/>
+  </g>
+
+  <g>
+    <circle cx="512" cy="512" r="104" fill="none" stroke="url(#accentGrad)" stroke-width="14"/>
+    <circle cx="512" cy="512" r="24" fill="#FBE3AE"/>
+  </g>
+
+  <g>
+    <path d="M382 610L396 532C399 515 414 502 431 502C448 502 463 515 466 532L470 575L498 540C508 527 526 522 541 530C556 538 563 556 556 571L514 661C506 679 488 691 469 694L430 700C411 703 392 696 380 682L365 664C354 651 352 631 362 617L382 610Z" fill="#89F5FF" stroke="#D9FDFF" stroke-width="7"/>
+  </g>
+
+  <g>
+    <path d="M547 462C547 423 579 392 619 392C658 392 690 423 690 462C690 501 658 532 619 532C579 532 547 501 547 462Z" fill="#FFE3A9" stroke="#FFF3CF" stroke-width="7"/>
+    <circle cx="619" cy="462" r="44" fill="#3B2A17"/>
+    <circle cx="619" cy="462" r="19" fill="#E9AB4A"/>
+    <circle cx="629" cy="452" r="7" fill="#FFF6E6"/>
+  </g>
+
+  <g>
+    <text x="512" y="796" text-anchor="middle" fill="url(#accentGrad)" font-size="148" font-weight="900" font-family="Impact, 'Arial Black', sans-serif" letter-spacing="4">GS</text>
+  </g>
+</svg>

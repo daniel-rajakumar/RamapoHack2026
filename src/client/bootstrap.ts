@@ -49,10 +49,15 @@ export function mountGame(appRoot: HTMLElement): () => void {
   let eyeAvailable = false;
   let trackingVideoElement: HTMLVideoElement | null = null;
   let isPlaying = false;
+  let showingResults = false;
   let isHost = false;
+  let latestRoomStarted = false;
+  let latestRoomPlayerCount = 1;
+  let currentHostId = "";
   let selectedMatchDurationSec = 60;
   let selectedRoomInputMode: InputMode = "hand";
   let currentAim = { x: 0.5, y: 0.5 };
+  let latestOpponentAim = { x: 0.5, y: 0.5 };
   let lastAimSentAt = 0;
   let lastAimSentX = 0.5;
   let lastAimSentY = 0.5;
@@ -62,7 +67,6 @@ export function mountGame(appRoot: HTMLElement): () => void {
   let peerId = "";
   let pendingRemoteIce: RTCIceCandidateInit[] = [];
   let makingOffer = false;
-  let cameraTestInFlight = false;
   let cameraAutoConnectInFlight = false;
   let disposed = false;
   const voiceAnnouncer = new ElevenLabsVoiceAnnouncer();
@@ -95,6 +99,75 @@ export function mountGame(appRoot: HTMLElement): () => void {
     ui.getRemoteWaitingVideoElement().srcObject = null;
     ui.getRemotePlayingVideoElement().srcObject = null;
     ui.setRemoteCameraVisible(false);
+  }
+
+  function updateWaitingStatus(playerCount: number, started: boolean): void {
+    ui.setWaitingControls({
+      isHost,
+      canStart: isHost && playerCount >= 2 && !started,
+      started,
+      playerCount
+    });
+
+    if (started) {
+      ui.setStatus("Match in progress...");
+      return;
+    }
+
+    if (isHost && playerCount < 2) {
+      ui.setStatus("Waiting for player 2 to join.");
+    } else if (isHost) {
+      ui.setStatus("Both players joined. Press Start Match.");
+    } else {
+      ui.setStatus("Waiting for host to start the match.");
+    }
+  }
+
+  function resetToHomeScreen(): void {
+    roomCode = "";
+    selfPlayerId = "";
+    isHost = false;
+    isPlaying = false;
+    showingResults = false;
+    latestRoomStarted = false;
+    latestRoomPlayerCount = 1;
+    currentHostId = "";
+    selectedMatchDurationSec = 60;
+    selectedRoomInputMode = "hand";
+    inputMode = "hand";
+    peerId = "";
+    knownPlayerIds.clear();
+    roomPlayersInitialized = false;
+    lastCountdownSecondSpoken = null;
+    clearStartCountdown();
+    teardownPeerConnection();
+    clearRemoteStream();
+    engine?.setOpponentCrosshairVisible(false);
+    engine?.clearTargets();
+    ui.setRoomCode("----");
+    ui.setMatchDurationSeconds(selectedMatchDurationSec);
+    ui.setInputMode(selectedRoomInputMode);
+    ui.setWaitingPlayers([], undefined, undefined);
+    ui.setPlayingPlayers([], undefined, undefined);
+    ui.setStatus("Enter name, then create or join.");
+    ui.showLobby();
+    localAudio.setMenuMusicEnabled(true);
+  }
+
+  function leaveRoomAndGoHome(): void {
+    if (!roomCode) {
+      resetToHomeScreen();
+      return;
+    }
+
+    ui.setStatus("Leaving room...");
+    socket.emit("leave_room", (ack) => {
+      if (!ack?.ok) {
+        ui.setStatus(`Leave failed: ${ack?.error ?? "ROOM_NOT_FOUND"}`);
+        return;
+      }
+      resetToHomeScreen();
+    });
   }
 
   function clearLocalPreview(): void {
@@ -151,8 +224,16 @@ export function mountGame(appRoot: HTMLElement): () => void {
 
     cameraAutoConnectInFlight = true;
     try {
-      await ensureMediaStream();
+      const stream = await ensureMediaStream();
+      await attachStream(ui.getCameraTestVideoElement(), stream);
+      ui.setCameraTestPreviewVisible(true);
+      ui.setCameraTestAimVisible(true);
+      ui.setCameraTestStatus("Camera connected.");
+      await ensureRuntimeReady(ui.getCameraTestVideoElement());
     } catch {
+      ui.setCameraTestPreviewVisible(false);
+      ui.setCameraTestAimVisible(false);
+      ui.setCameraTestStatus("Camera unavailable or permission denied.");
       ui.setLocalCameraStatus("Allow camera access to auto-connect.");
       ui.setLocalCameraVisible(false);
     } finally {
@@ -362,6 +443,7 @@ export function mountGame(appRoot: HTMLElement): () => void {
       y: clamp01(y),
       t: Date.now()
     });
+    engine?.triggerShotEffect(clamp01(x), clamp01(y), "self");
     localAudio.playAttack();
   }
 
@@ -504,35 +586,6 @@ export function mountGame(appRoot: HTMLElement): () => void {
     trackingVideoElement = trackingVideo;
 
     applyInputMode(inputMode);
-  }
-
-  async function runCameraTest(): Promise<void> {
-    if (cameraTestInFlight) {
-      return;
-    }
-    cameraTestInFlight = true;
-    ui.setCameraTestBusy(true);
-    ui.setCameraTestStatus("Requesting camera access...");
-
-    try {
-      const testVideo = ui.getCameraTestVideoElement();
-      const stream = await ensureMediaStream();
-      await attachStream(testVideo, stream);
-      syncLocalTracksToPeer();
-      await ensureRuntimeReady(testVideo);
-      ui.setCameraTestPreviewVisible(true);
-      ui.setCameraTestAimVisible(true);
-      ui.setCameraTestStatus("Camera looks good.");
-    } catch {
-      ui.setCameraTestPreviewVisible(false);
-      ui.setCameraTestAimVisible(false);
-      ui.setCameraTestStatus("Camera unavailable or permission denied.");
-      ui.setLocalCameraStatus("Camera unavailable or permission denied.");
-      ui.setLocalCameraVisible(false);
-    } finally {
-      ui.setCameraTestBusy(false);
-      cameraTestInFlight = false;
-    }
   }
 
   function getOpponent(players: PlayerView[]): PlayerView | undefined {
@@ -681,7 +734,12 @@ export function mountGame(appRoot: HTMLElement): () => void {
       roomCode = ack.roomCode;
       selfPlayerId = ack.playerId;
       isHost = true;
+      currentHostId = selfPlayerId;
+      showingResults = false;
+      latestRoomStarted = false;
+      latestRoomPlayerCount = 1;
       selectedRoomInputMode = "hand";
+      latestOpponentAim = { x: 0.5, y: 0.5 };
       ui.setInputMode(selectedRoomInputMode);
       ui.setRoomCode(roomCode);
       ui.setStatus("Room created. Waiting for player 2.");
@@ -706,7 +764,12 @@ export function mountGame(appRoot: HTMLElement): () => void {
       roomCode = ack.roomCode;
       selfPlayerId = ack.playerId;
       isHost = false;
+      currentHostId = "";
+      showingResults = false;
+      latestRoomStarted = false;
+      latestRoomPlayerCount = 1;
       selectedRoomInputMode = "hand";
+      latestOpponentAim = { x: 0.5, y: 0.5 };
       ui.setInputMode(selectedRoomInputMode);
       ui.setRoomCode(roomCode);
       ui.setStatus("Joined room. Waiting for host to start.");
@@ -731,15 +794,45 @@ export function mountGame(appRoot: HTMLElement): () => void {
     }
     selectedRoomInputMode = mode;
     ui.setInputMode(selectedRoomInputMode);
-    applyInputMode(mode);
   });
 
   ui.onMatchDurationChange((seconds) => {
     selectedMatchDurationSec = seconds;
   });
 
-  ui.onTestCamera(() => {
-    void runCameraTest();
+  ui.onGiveHost(() => {
+    if (!roomCode) {
+      return;
+    }
+    socket.emit("give_host", { roomCode }, (ack) => {
+      if (!ack.ok) {
+        ui.setStatus(`Give host failed: ${ack.error}`);
+        return;
+      }
+      ui.setStatus("Host transferred to opponent.");
+    });
+  });
+
+  ui.onLeaveRoom(() => {
+    leaveRoomAndGoHome();
+  });
+
+  ui.onBackToRoom(() => {
+    if (!roomCode) {
+      resetToHomeScreen();
+      return;
+    }
+    showingResults = false;
+    clearStartCountdown();
+    ui.showWaiting();
+    updateWaitingStatus(latestRoomPlayerCount, latestRoomStarted);
+    engine?.setOpponentCrosshairVisible(false);
+    engine?.clearTargets();
+    void autoConnectCamera();
+  });
+
+  ui.onLeaveToHome(() => {
+    leaveRoomAndGoHome();
   });
 
   ui.onStartMatch(() => {
@@ -751,11 +844,11 @@ export function mountGame(appRoot: HTMLElement): () => void {
       "start_match",
       { roomCode, durationMs: selectedMatchDurationSec * 1000, inputMode: selectedRoomInputMode },
       (ack) => {
-      if (!ack.ok) {
-        ui.setStatus(`Start failed: ${ack.error}`);
-        return;
-      }
-      ui.setStatus("Match is starting...");
+        if (!ack.ok) {
+          ui.setStatus(`Start failed: ${ack.error}`);
+          return;
+        }
+        ui.setStatus("Match is starting...");
       }
     );
   });
@@ -781,6 +874,7 @@ export function mountGame(appRoot: HTMLElement): () => void {
     teardownPeerConnection();
     ui.setRemoteCameraStatus("Disconnected from opponent camera.");
     isPlaying = false;
+    showingResults = false;
     engine?.setOpponentCrosshairVisible(false);
     clearMusicProbe();
     clearStartCountdown();
@@ -806,6 +900,9 @@ export function mountGame(appRoot: HTMLElement): () => void {
     }
     greetNewPlayers(payload.players);
     isHost = payload.hostId === selfPlayerId;
+    currentHostId = payload.hostId;
+    latestRoomStarted = payload.started;
+    latestRoomPlayerCount = payload.players.length;
     if (!isHost || payload.started) {
       selectedMatchDurationSec = Math.round(payload.durationMs / 1000);
     }
@@ -819,26 +916,11 @@ export function mountGame(appRoot: HTMLElement): () => void {
     ui.setMatchDurationSeconds(selectedMatchDurationSec);
     ui.setMatchDurationEditable(isHost && !payload.started);
     ui.setRoomCode(payload.roomCode);
-    ui.setWaitingPlayers(payload.players, selfPlayerId);
-    ui.setPlayingPlayers(payload.players, selfPlayerId);
-    ui.setWaitingControls({
-      isHost,
-      canStart: isHost && payload.players.length >= 2 && !payload.started,
-      started: payload.started,
-      playerCount: payload.players.length
-    });
+    ui.setWaitingPlayers(payload.players, selfPlayerId, payload.hostId);
+    ui.setPlayingPlayers(payload.players, selfPlayerId, payload.hostId);
+    updateWaitingStatus(payload.players.length, payload.started);
 
-    if (!payload.started && !isPlaying) {
-      if (isHost && payload.players.length < 2) {
-        ui.setStatus("Waiting for player 2 to join.");
-      } else if (isHost) {
-        ui.setStatus("Both players joined. Press Start Match.");
-      } else {
-        ui.setStatus("Waiting for host to start the match.");
-      }
-    }
-
-    if (!isPlaying) {
+    if (!isPlaying && !showingResults) {
       clearStartCountdown();
       localAudio.setMenuMusicEnabled(true);
       ui.showWaiting();
@@ -910,6 +992,8 @@ export function mountGame(appRoot: HTMLElement): () => void {
 
   socket.on("match_start", async (payload) => {
     isPlaying = true;
+    showingResults = false;
+    latestRoomStarted = true;
     selectedRoomInputMode = payload.inputMode;
     inputMode = payload.inputMode;
     ui.setInputMode(selectedRoomInputMode);
@@ -925,12 +1009,13 @@ export function mountGame(appRoot: HTMLElement): () => void {
   });
 
   socket.on("state_update", (payload) => {
-    ui.setPlayingPlayers(payload.players, selfPlayerId);
+    ui.setPlayingPlayers(payload.players, selfPlayerId, currentHostId);
     ui.setTimer(payload.timeRemainingMs);
     maybeSpeakCountdown(payload.timeRemainingMs);
     engine?.syncTargets(payload.targets);
     const opponentAim = payload.aims.find((aim) => aim.id !== selfPlayerId);
     if (opponentAim) {
+      latestOpponentAim = { x: opponentAim.x, y: opponentAim.y };
       engine?.setOpponentCrosshair(opponentAim.x, opponentAim.y);
       engine?.setOpponentCrosshairVisible(true);
     } else {
@@ -938,11 +1023,30 @@ export function mountGame(appRoot: HTMLElement): () => void {
     }
   });
 
+  socket.on("shot_result", (payload) => {
+    if (payload.shooterId === selfPlayerId) {
+      return;
+    }
+    engine?.triggerShotEffect(latestOpponentAim.x, latestOpponentAim.y, "opponent");
+  });
+
   socket.on("match_end", (payload: MatchEnd) => {
     isPlaying = false;
+    showingResults = true;
+    latestRoomStarted = false;
+    latestRoomPlayerCount = payload.finalPlayers.length;
     clearStartCountdown();
     lastCountdownSecondSpoken = null;
-    voiceAnnouncer.speak("Game over");
+    if (payload.tie) {
+      voiceAnnouncer.speak("Game over. It is a tie.");
+    } else {
+      const winner = payload.winnerId ? payload.finalPlayers.find((player) => player.id === payload.winnerId) : null;
+      if (winner) {
+        voiceAnnouncer.speak(`The winner is ${winner.name} with the point of ${winner.score}`);
+      } else {
+        voiceAnnouncer.speak("Game over");
+      }
+    }
     localAudio.setMenuMusicEnabled(true);
     ui.showResults(payload, selfPlayerId);
     ui.setTimer(0);

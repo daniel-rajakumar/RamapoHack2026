@@ -364,6 +364,16 @@ input {
   margin: 0.55rem 0;
 }
 
+.waiting-settings-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+
+.waiting-settings-item select {
+  width: 100%;
+}
+
 .players {
   list-style: none;
   margin: 0.55rem 0;

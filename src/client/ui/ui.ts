@@ -7,13 +7,15 @@ export interface UIController {
   onCreateRoom(handler: (name: string) => void): void;
   onJoinRoom(handler: (roomCode: string, name: string) => void): void;
   onStartMatch(handler: () => void): void;
-  onTestCamera(handler: () => void): void;
+  onGiveHost(handler: () => void): void;
+  onLeaveRoom(handler: () => void): void;
+  onBackToRoom(handler: () => void): void;
+  onLeaveToHome(handler: () => void): void;
   onInputModeChange(handler: (mode: InputMode) => void): void;
   onMatchDurationChange(handler: (seconds: number) => void): void;
   setStatus(message: string): void;
   setCameraTestStatus(message: string): void;
   setCameraTestPreviewVisible(visible: boolean): void;
-  setCameraTestBusy(isBusy: boolean): void;
   setCameraTestAim(x: number, y: number): void;
   setCameraTestAimVisible(visible: boolean): void;
   setLocalCameraStatus(message: string): void;
@@ -23,8 +25,8 @@ export interface UIController {
   setMatchDurationSeconds(seconds: number): void;
   setMatchDurationEditable(editable: boolean): void;
   setRoomCode(roomCode: string): void;
-  setWaitingPlayers(players: PlayerView[], selfId?: string): void;
-  setPlayingPlayers(players: PlayerView[], selfId?: string): void;
+  setWaitingPlayers(players: PlayerView[], selfId?: string, hostId?: string): void;
+  setPlayingPlayers(players: PlayerView[], selfId?: string, hostId?: string): void;
   setTimer(timeRemainingMs: number): void;
   setStartCountdown(secondsRemaining: number | null): void;
   setTrackingStatus(message: string): void;
@@ -80,7 +82,7 @@ export function createUI(root: HTMLElement): UIController {
     <div class="app-shell">
       <section id="screen-lobby" class="screen panel active">
         <div class="panel-header">Mission Setup</div>
-        <h1 class="title">Gesture Shooter</h1>
+        <h1 class="title">bubble poppAR</h1>
         <p class="subtitle">2 players • server-authoritative • fantasy arcade vibe</p>
 
         <div class="form-block">
@@ -102,9 +104,6 @@ export function createUI(root: HTMLElement): UIController {
         <div class="form-block">
           <label>Camera Check</label>
           <div class="row">
-            <button id="test-camera" class="gold-btn">Test Camera</button>
-          </div>
-          <div class="row">
             <label for="input-mode-lobby">Control</label>
             <select id="input-mode-lobby">
               <option value="hand">Hand</option>
@@ -116,7 +115,7 @@ export function createUI(root: HTMLElement): UIController {
             <video id="camera-test-video" class="camera-test-video" autoplay playsinline muted></video>
             <div id="camera-test-crosshair" class="camera-test-crosshair"></div>
           </div>
-          <p class="status" id="camera-test-status">Camera not tested.</p>
+          <p class="status" id="camera-test-status">Connecting camera...</p>
         </div>
 
         <p class="status" id="lobby-status">Enter name, then create or join.</p>
@@ -150,22 +149,30 @@ export function createUI(root: HTMLElement): UIController {
         </div>
         <div class="score-panel">
           <h3>Game Settings</h3>
-          <label for="match-duration-select">Match Duration</label>
-          <select id="match-duration-select">
-            <option value="30">30s</option>
-            <option value="60" selected>60s</option>
-            <option value="90">90s</option>
-            <option value="120">120s</option>
-          </select>
-          <label for="waiting-input-mode">Input Mode</label>
-          <select id="waiting-input-mode">
-            <option value="hand">Hand</option>
-            <option value="eye">Eye (Blink Shoot)</option>
-            <option value="mouse">Mouse</option>
-          </select>
+          <div class="waiting-settings-row">
+            <div class="waiting-settings-item">
+              <label for="match-duration-select">Match Duration</label>
+              <select id="match-duration-select">
+                <option value="30">30s</option>
+                <option value="60" selected>60s</option>
+                <option value="90">90s</option>
+                <option value="120">120s</option>
+              </select>
+            </div>
+            <div class="waiting-settings-item">
+              <label for="waiting-input-mode">Input Mode</label>
+              <select id="waiting-input-mode">
+                <option value="hand">Hand</option>
+                <option value="eye">Eye (Blink Shoot)</option>
+                <option value="mouse">Mouse</option>
+              </select>
+            </div>
+          </div>
         </div>
         <div class="row waiting-actions">
-          <button id="start-match" class="gold-btn wide" disabled>Start Match</button>
+          <button id="start-match" class="gold-btn" disabled>Start Match</button>
+          <button id="give-host" class="gold-btn" disabled>Give Host</button>
+          <button id="leave-room" class="gold-btn">Leave Room</button>
         </div>
         <p class="status" id="waiting-status">Waiting for players...</p>
       </section>
@@ -226,6 +233,10 @@ export function createUI(root: HTMLElement): UIController {
           <h3>Final Scores</h3>
           <ul class="players" id="results-players"></ul>
         </div>
+        <div class="row waiting-actions">
+          <button id="results-back-room" class="gold-btn">Back to Room</button>
+          <button id="results-home" class="gold-btn">Home</button>
+        </div>
       </section>
     </div>
   `;
@@ -242,7 +253,10 @@ export function createUI(root: HTMLElement): UIController {
   const joinRoomInput = root.querySelector("#join-room-code") as HTMLInputElement;
   const joinRoomButton = root.querySelector("#join-room") as HTMLButtonElement;
   const startMatchButton = root.querySelector("#start-match") as HTMLButtonElement;
-  const testCameraButton = root.querySelector("#test-camera") as HTMLButtonElement;
+  const giveHostButton = root.querySelector("#give-host") as HTMLButtonElement;
+  const leaveRoomButton = root.querySelector("#leave-room") as HTMLButtonElement;
+  const resultsBackRoomButton = root.querySelector("#results-back-room") as HTMLButtonElement;
+  const resultsHomeButton = root.querySelector("#results-home") as HTMLButtonElement;
   const cameraTestStatus = root.querySelector("#camera-test-status") as HTMLParagraphElement;
   const cameraTestStage = root.querySelector("#camera-test-stage") as HTMLDivElement;
   const cameraTestCrosshair = root.querySelector("#camera-test-crosshair") as HTMLDivElement;
@@ -314,8 +328,23 @@ export function createUI(root: HTMLElement): UIController {
         handler();
       });
     },
-    onTestCamera(handler) {
-      testCameraButton.addEventListener("click", () => {
+    onGiveHost(handler) {
+      giveHostButton.addEventListener("click", () => {
+        handler();
+      });
+    },
+    onLeaveRoom(handler) {
+      leaveRoomButton.addEventListener("click", () => {
+        handler();
+      });
+    },
+    onBackToRoom(handler) {
+      resultsBackRoomButton.addEventListener("click", () => {
+        handler();
+      });
+    },
+    onLeaveToHome(handler) {
+      resultsHomeButton.addEventListener("click", () => {
         handler();
       });
     },
@@ -342,10 +371,6 @@ export function createUI(root: HTMLElement): UIController {
     },
     setCameraTestPreviewVisible(visible) {
       cameraTestStage.classList.toggle("active", visible);
-    },
-    setCameraTestBusy(isBusy) {
-      testCameraButton.disabled = isBusy;
-      testCameraButton.textContent = isBusy ? "Testing..." : "Test Camera";
     },
     setCameraTestAim(x, y) {
       cameraTestCrosshair.style.left = `${(x * 100).toFixed(2)}%`;
@@ -380,15 +405,17 @@ export function createUI(root: HTMLElement): UIController {
       waitingRoomCode.textContent = roomCode;
       hudRoomCode.textContent = roomCode;
     },
-    setWaitingPlayers(players, selfId) {
+    setWaitingPlayers(players, selfId, hostId) {
       const selfPlayer = players.find((player) => player.id === selfId);
       const opponent = players.find((player) => player.id !== selfId);
+      const selfHostPrefix = selfPlayer && selfPlayer.id === hostId ? "👑 " : "";
+      const opponentHostPrefix = opponent && opponent.id === hostId ? "👑 " : "";
 
-      partySelfName.textContent = selfPlayer ? `${selfPlayer.name}${selfId ? " (You)" : ""}` : "You";
+      partySelfName.textContent = selfPlayer ? `${selfHostPrefix}${selfPlayer.name}${selfId ? " (You)" : ""}` : "You";
       partySelfScore.textContent = String(selfPlayer?.score ?? 0);
 
       if (opponent) {
-        partyOppName.textContent = opponent.name;
+        partyOppName.textContent = `${opponentHostPrefix}${opponent.name}`;
         partyOppScore.textContent = String(opponent.score);
         partyOppCard.classList.remove("pending");
       } else {
@@ -397,15 +424,17 @@ export function createUI(root: HTMLElement): UIController {
         partyOppCard.classList.add("pending");
       }
     },
-    setPlayingPlayers(players, selfId) {
+    setPlayingPlayers(players, selfId, hostId) {
       const selfPlayer = players.find((player) => player.id === selfId);
       const opponent = players.find((player) => player.id !== selfId);
+      const selfHostPrefix = selfPlayer && selfPlayer.id === hostId ? "👑 " : "";
+      const opponentHostPrefix = opponent && opponent.id === hostId ? "👑 " : "";
 
-      statsSelfName.textContent = selfPlayer ? `${selfPlayer.name}${selfId ? " (You)" : ""}` : "You";
+      statsSelfName.textContent = selfPlayer ? `${selfHostPrefix}${selfPlayer.name}${selfId ? " (You)" : ""}` : "You";
       statsSelfScore.textContent = String(selfPlayer?.score ?? 0);
 
       if (opponent) {
-        statsOppName.textContent = opponent.name;
+        statsOppName.textContent = `${opponentHostPrefix}${opponent.name}`;
         statsOppScore.textContent = String(opponent.score);
         statsOppCard.classList.remove("pending");
       } else {
@@ -455,6 +484,9 @@ export function createUI(root: HTMLElement): UIController {
       } else {
         waitingRole.textContent = "Waiting for host to start the match.";
       }
+      giveHostButton.disabled = !(isHost && !started && playerCount >= 2);
+      giveHostButton.textContent = "Give Host to Opponent";
+      leaveRoomButton.disabled = false;
       matchDurationSelect.disabled = !(isHost && !started);
       waitingInputMode.disabled = !(isHost && !started);
     },
@@ -472,11 +504,11 @@ export function createUI(root: HTMLElement): UIController {
 
       const winner = payload.winnerId ? payload.finalPlayers.find((player) => player.id === payload.winnerId) : null;
       if (payload.tie) {
-        resultsTitle.textContent = "Tie game";
+        resultsTitle.textContent = "Game over. It is a tie.";
         resultsTitle.classList.remove("danger");
       } else if (winner) {
         const isSelf = winner.id === selfId;
-        resultsTitle.textContent = isSelf ? "Victory" : `${winner.name} Wins`;
+        resultsTitle.textContent = `The winner is ${winner.name} with the point of ${winner.score}`;
         resultsTitle.classList.toggle("danger", !isSelf);
       } else {
         resultsTitle.textContent = "Match ended";

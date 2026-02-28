@@ -3,8 +3,8 @@ import type { ReactNode } from "react";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Gesture Shooter",
-  description: "2-player webcam + Three.js gesture shooter"
+  title: "bubble poppAR",
+  description: "2-player webcam + Three.js bubble arena"
 };
 
 export default function RootLayout({

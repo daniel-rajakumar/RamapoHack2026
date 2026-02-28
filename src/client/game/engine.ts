@@ -15,6 +15,19 @@ export class GameEngine {
 
   private readonly targetManager: TargetMeshManager;
 
+  private readonly shotFlashGeometry = new THREE.CircleGeometry(1, 20);
+
+  private readonly shotRingGeometry = new THREE.RingGeometry(0.68, 1, 32);
+
+  private readonly shotEffects: Array<{
+    startedAt: number;
+    durationSec: number;
+    flash: THREE.Mesh;
+    flashMaterial: THREE.MeshBasicMaterial;
+    ring: THREE.Mesh;
+    ringMaterial: THREE.MeshBasicMaterial;
+  }> = [];
+
   private animationFrameId = 0;
 
   private worldHeight = 2;
@@ -124,9 +137,38 @@ export class GameEngine {
 
   private renderLoop = () => {
     this.resize();
+    this.targetManager.update(performance.now() / 1000);
+    this.updateShotEffects(performance.now() / 1000);
     this.renderer.render(this.scene, this.camera);
     this.animationFrameId = window.requestAnimationFrame(this.renderLoop);
   };
+
+  private updateShotEffects(nowSec: number): void {
+    for (let i = this.shotEffects.length - 1; i >= 0; i -= 1) {
+      const effect = this.shotEffects[i];
+      const t = (nowSec - effect.startedAt) / effect.durationSec;
+
+      if (t >= 1) {
+        this.scene.remove(effect.flash);
+        this.scene.remove(effect.ring);
+        effect.flashMaterial.dispose();
+        effect.ringMaterial.dispose();
+        this.shotEffects.splice(i, 1);
+        continue;
+      }
+
+      const eased = 1 - Math.pow(1 - Math.max(0, t), 3);
+      const inv = 1 - Math.max(0, t);
+
+      const flashScale = 0.05 + eased * 0.12;
+      effect.flash.scale.setScalar(flashScale * this.worldHeight);
+      effect.flashMaterial.opacity = inv * inv * 0.9;
+
+      const ringScale = 0.04 + eased * 0.19;
+      effect.ring.scale.setScalar(ringScale * this.worldHeight);
+      effect.ringMaterial.opacity = inv * 0.85;
+    }
+  }
 
   start(): void {
     if (this.animationFrameId) {
@@ -156,6 +198,45 @@ export class GameEngine {
     this.opponentCrosshair.visible = visible;
   }
 
+  triggerShotEffect(x: number, y: number, owner: "self" | "opponent" = "self"): void {
+    const point = this.normalizedToScene(x, y);
+    const color = owner === "self" ? 0xfff1b0 : 0xff7a7a;
+
+    const flashMaterial = new THREE.MeshBasicMaterial({
+      color,
+      transparent: true,
+      opacity: 0.9,
+      depthTest: false,
+      depthWrite: false
+    });
+    const flash = new THREE.Mesh(this.shotFlashGeometry, flashMaterial);
+    flash.renderOrder = 26;
+    flash.position.set(point.x, point.y, 0.16);
+
+    const ringMaterial = new THREE.MeshBasicMaterial({
+      color,
+      transparent: true,
+      opacity: 0.8,
+      side: THREE.DoubleSide,
+      depthTest: false,
+      depthWrite: false
+    });
+    const ring = new THREE.Mesh(this.shotRingGeometry, ringMaterial);
+    ring.renderOrder = 25;
+    ring.position.set(point.x, point.y, 0.15);
+
+    this.scene.add(flash);
+    this.scene.add(ring);
+    this.shotEffects.push({
+      startedAt: performance.now() / 1000,
+      durationSec: 0.22,
+      flash,
+      flashMaterial,
+      ring,
+      ringMaterial
+    });
+  }
+
   syncTargets(targets: TargetView[]): void {
     this.targetManager.sync(targets);
   }
@@ -167,6 +248,15 @@ export class GameEngine {
   dispose(): void {
     this.stop();
     this.targetManager.clear();
+    for (const effect of this.shotEffects) {
+      this.scene.remove(effect.flash);
+      this.scene.remove(effect.ring);
+      effect.flashMaterial.dispose();
+      effect.ringMaterial.dispose();
+    }
+    this.shotEffects.length = 0;
+    this.shotFlashGeometry.dispose();
+    this.shotRingGeometry.dispose();
     window.removeEventListener("resize", this.onResize);
     this.resizeObserver?.disconnect();
     this.renderer.dispose();
