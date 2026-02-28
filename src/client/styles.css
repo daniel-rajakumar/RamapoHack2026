@@ -239,6 +239,21 @@ input {
   text-shadow: 0 1px 0 var(--ink-shadow);
 }
 
+.camera-test-video {
+  display: none;
+  width: min(100%, 380px);
+  aspect-ratio: 4 / 3;
+  margin-top: 0.55rem;
+  border-radius: 12px;
+  border: 2px solid rgba(255, 224, 150, 0.34);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+  object-fit: cover;
+}
+
+.camera-test-video.active {
+  display: block;
+}
+
 .waiting-actions {
   justify-content: center;
   margin: 0.55rem 0;
@@ -335,7 +350,13 @@ input {
 
 .webcam {
   object-fit: cover;
+}
+
+.webcam,
+.camera-test-video {
+  -webkit-transform: scaleX(-1);
   transform: scaleX(-1);
+  transform-origin: center;
 }
 
 .hud {

@@ -7,8 +7,12 @@ export interface UIController {
   onCreateRoom(handler: (name: string) => void): void;
   onJoinRoom(handler: (roomCode: string, name: string) => void): void;
   onStartMatch(handler: () => void): void;
+  onTestCamera(handler: () => void): void;
   onInputModeChange(handler: (mode: InputMode) => void): void;
   setStatus(message: string): void;
+  setCameraTestStatus(message: string): void;
+  setCameraTestPreviewVisible(visible: boolean): void;
+  setCameraTestBusy(isBusy: boolean): void;
   setRoomCode(roomCode: string): void;
   setWaitingPlayers(players: PlayerView[], selfId?: string): void;
   setPlayingPlayers(players: PlayerView[], selfId?: string): void;
@@ -21,6 +25,7 @@ export interface UIController {
   showPlaying(): void;
   showResults(payload: MatchEnd, selfId?: string): void;
   getVideoElement(): HTMLVideoElement;
+  getCameraTestVideoElement(): HTMLVideoElement;
   getOverlayElement(): HTMLDivElement;
   getStageElement(): HTMLDivElement;
 }
@@ -78,6 +83,15 @@ export function createUI(root: HTMLElement): UIController {
             <button id="join-room" class="gold-btn">Join Room</button>
             <button id="create-room" class="gold-btn">Create Room</button>
           </div>
+        </div>
+
+        <div class="form-block">
+          <label>Camera Check</label>
+          <div class="row">
+            <button id="test-camera" class="gold-btn">Test Camera</button>
+          </div>
+          <video id="camera-test-video" class="camera-test-video" autoplay playsinline muted></video>
+          <p class="status" id="camera-test-status">Camera not tested.</p>
         </div>
 
         <p class="status" id="lobby-status">Enter name, then create or join.</p>
@@ -149,6 +163,8 @@ export function createUI(root: HTMLElement): UIController {
   const joinRoomInput = root.querySelector("#join-room-code") as HTMLInputElement;
   const joinRoomButton = root.querySelector("#join-room") as HTMLButtonElement;
   const startMatchButton = root.querySelector("#start-match") as HTMLButtonElement;
+  const testCameraButton = root.querySelector("#test-camera") as HTMLButtonElement;
+  const cameraTestStatus = root.querySelector("#camera-test-status") as HTMLParagraphElement;
   const lobbyStatus = root.querySelector("#lobby-status") as HTMLParagraphElement;
 
   const waitingRoomCode = root.querySelector("#waiting-room-code") as HTMLElement;
@@ -167,6 +183,7 @@ export function createUI(root: HTMLElement): UIController {
   const resultsPlayers = root.querySelector("#results-players") as HTMLUListElement;
 
   const videoElement = root.querySelector("#webcam") as HTMLVideoElement;
+  const cameraTestVideo = root.querySelector("#camera-test-video") as HTMLVideoElement;
   const overlayElement = root.querySelector("#overlay-root") as HTMLDivElement;
   const stageElement = root.querySelector("#stage") as HTMLDivElement;
 
@@ -192,6 +209,11 @@ export function createUI(root: HTMLElement): UIController {
         handler();
       });
     },
+    onTestCamera(handler) {
+      testCameraButton.addEventListener("click", () => {
+        handler();
+      });
+    },
     onInputModeChange(handler) {
       inputMode.addEventListener("change", () => {
         const mode = inputMode.value === "mouse" ? "mouse" : "hand";
@@ -201,6 +223,16 @@ export function createUI(root: HTMLElement): UIController {
     setStatus(message) {
       lobbyStatus.textContent = message;
       waitingStatus.textContent = message;
+    },
+    setCameraTestStatus(message) {
+      cameraTestStatus.textContent = message;
+    },
+    setCameraTestPreviewVisible(visible) {
+      cameraTestVideo.classList.toggle("active", visible);
+    },
+    setCameraTestBusy(isBusy) {
+      testCameraButton.disabled = isBusy;
+      testCameraButton.textContent = isBusy ? "Testing..." : "Test Camera";
     },
     setRoomCode(roomCode) {
       waitingRoomCode.textContent = roomCode;
@@ -266,6 +298,9 @@ export function createUI(root: HTMLElement): UIController {
     },
     getVideoElement() {
       return videoElement;
+    },
+    getCameraTestVideoElement() {
+      return cameraTestVideo;
     },
     getOverlayElement() {
       return overlayElement;

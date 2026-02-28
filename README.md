@@ -25,6 +25,7 @@ Open [http://localhost:3000](http://localhost:3000).
 - `CORS_ORIGINS`: comma-separated allowlist for browser origins hitting Socket.IO.
   - Example: `CORS_ORIGINS=https://game.example.com,https://staging.example.com`
   - Defaults include localhost ports (`3000`, `4173`, `5173`) and Render's own external URL at runtime.
+  - In non-production, private/LAN IPv4 origins are also allowed (useful for 2 laptops on the same network).
 - `NEXT_PUBLIC_SERVER_URL` (optional): explicit socket target URL for client.
   - Leave unset for same-origin operation.
 

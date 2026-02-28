@@ -10,6 +10,13 @@ function clamp01(value: number): number {
   return Math.max(0, Math.min(1, value));
 }
 
+async function attachStream(videoElement: HTMLVideoElement, stream: MediaStream): Promise<void> {
+  if (videoElement.srcObject !== stream) {
+    videoElement.srcObject = stream;
+  }
+  await videoElement.play();
+}
+
 async function startWebcam(videoElement: HTMLVideoElement): Promise<MediaStream> {
   const stream = await navigator.mediaDevices.getUserMedia({
     video: {
@@ -19,8 +26,7 @@ async function startWebcam(videoElement: HTMLVideoElement): Promise<MediaStream>
     audio: false
   });
 
-  videoElement.srcObject = stream;
-  await videoElement.play();
+  await attachStream(videoElement, stream);
   return stream;
 }
 
@@ -39,6 +45,7 @@ export function mountGame(appRoot: HTMLElement): () => void {
   let isHost = false;
   let currentAim = { x: 0.5, y: 0.5 };
   let mediaStream: MediaStream | null = null;
+  let cameraTestInFlight = false;
   let disposed = false;
 
   function setAim(x: number, y: number): void {
@@ -107,6 +114,15 @@ export function mountGame(appRoot: HTMLElement): () => void {
         applyInputMode("mouse");
         return;
       }
+    } else {
+      try {
+        await attachStream(video, mediaStream);
+      } catch {
+        ui.setTrackingStatus("Camera unavailable. Mouse mode active");
+        handAvailable = false;
+        applyInputMode("mouse");
+        return;
+      }
     }
 
     if (!handController) {
@@ -137,6 +153,32 @@ export function mountGame(appRoot: HTMLElement): () => void {
     }
 
     applyInputMode(inputMode);
+  }
+
+  async function runCameraTest(): Promise<void> {
+    if (cameraTestInFlight) {
+      return;
+    }
+    cameraTestInFlight = true;
+    ui.setCameraTestBusy(true);
+    ui.setCameraTestStatus("Requesting camera access...");
+
+    try {
+      const testVideo = ui.getCameraTestVideoElement();
+      if (!mediaStream) {
+        mediaStream = await startWebcam(testVideo);
+      } else {
+        await attachStream(testVideo, mediaStream);
+      }
+      ui.setCameraTestPreviewVisible(true);
+      ui.setCameraTestStatus("Camera looks good.");
+    } catch {
+      ui.setCameraTestPreviewVisible(false);
+      ui.setCameraTestStatus("Camera unavailable or permission denied.");
+    } finally {
+      ui.setCameraTestBusy(false);
+      cameraTestInFlight = false;
+    }
   }
 
   ui.onCreateRoom((name) => {
@@ -185,6 +227,10 @@ export function mountGame(appRoot: HTMLElement): () => void {
 
   ui.onInputModeChange((mode) => {
     applyInputMode(mode);
+  });
+
+  ui.onTestCamera(() => {
+    void runCameraTest();
   });
 
   ui.onStartMatch(() => {
@@ -271,6 +317,9 @@ export function mountGame(appRoot: HTMLElement): () => void {
       }
       mediaStream = null;
     }
+    ui.getVideoElement().srcObject = null;
+    ui.getCameraTestVideoElement().srcObject = null;
+    ui.setCameraTestPreviewVisible(false);
   };
 
   const beforeUnloadHandler = () => {

@@ -5,6 +5,7 @@ export type ErrorCode =
   | "MATCH_NOT_STARTED"
   | "MATCH_ENDED"
   | "INVALID_SHOT"
+  | "INVALID_SIGNAL"
   | "RATE_LIMITED"
   | "NOT_HOST"
   | "NOT_ENOUGH_PLAYERS"
@@ -17,6 +18,16 @@ export type CreateRoomReq = { name: string };
 export type JoinRoomReq = { roomCode: string; name: string };
 export type ShootReq = { roomCode: string; x: number; y: number; t?: number };
 export type StartMatchReq = { roomCode: string };
+export type WebRtcSignalReq = {
+  roomCode: string;
+  targetId: string;
+  signal: WebRtcSignal;
+};
+
+export type WebRtcSignal =
+  | { kind: "offer"; sdp: string }
+  | { kind: "answer"; sdp: string }
+  | { kind: "ice"; candidate: string; sdpMid?: string | null; sdpMLineIndex?: number | null };
 
 export type CreateRoomAck = { roomCode: string; playerId: string } | { error: ErrorCode };
 export type JoinRoomAck =
@@ -46,6 +57,11 @@ export type MatchEnd = {
   reason: "timeout" | "forfeit";
 };
 export type ErrorEvent = { code: ErrorCode; message: string };
+export type WebRtcSignalEvent = {
+  roomCode: string;
+  fromId: string;
+  signal: WebRtcSignal;
+};
 
 export interface ServerToClientEvents {
   room_update: (payload: RoomUpdate) => void;
@@ -54,6 +70,7 @@ export interface ServerToClientEvents {
   shot_result: (payload: ShotResult) => void;
   match_end: (payload: MatchEnd) => void;
   error_event: (payload: ErrorEvent) => void;
+  webrtc_signal: (payload: WebRtcSignalEvent) => void;
 }
 
 export interface ClientToServerEvents {
@@ -61,6 +78,7 @@ export interface ClientToServerEvents {
   join_room: (payload: JoinRoomReq, cb?: (response: JoinRoomAck) => void) => void;
   start_match: (payload: StartMatchReq, cb?: (response: StartMatchAck) => void) => void;
   shoot: (payload: ShootReq) => void;
+  webrtc_signal: (payload: WebRtcSignalReq) => void;
 }
 
 export interface PlayerState {
