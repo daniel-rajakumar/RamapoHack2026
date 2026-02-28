@@ -1,6 +1,6 @@
 <svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
   <title id="title">Gesture Shooter logo</title>
-  <desc id="desc">Round emblem logo with crosshair, hand and eye motif, and GS monogram.</desc>
+  <desc id="desc">Round emblem logo with crosshair, hand and eye motif, and BP monogram.</desc>
 
   <defs>
     <linearGradient id="ringGrad" x1="182" y1="182" x2="842" y2="842" gradientUnits="userSpaceOnUse">
@@ -53,6 +53,6 @@
   </g>
 
   <g>
-    <text x="512" y="796" text-anchor="middle" fill="url(#accentGrad)" font-size="148" font-weight="900" font-family="Impact, 'Arial Black', sans-serif" letter-spacing="4">GS</text>
+    <text x="512" y="796" text-anchor="middle" fill="url(#accentGrad)" font-size="148" font-weight="900" font-family="Impact, 'Arial Black', sans-serif" letter-spacing="4">BP</text>
   </g>
 </svg>
