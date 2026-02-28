@@ -1,0 +1,112 @@
+import http from "node:http";
+import { existsSync } from "node:fs";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
+import cors from "cors";
+import express from "express";
+import helmet from "helmet";
+import { Server } from "socket.io";
+import { HOST, PORT } from "./config";
+import { RoomStore } from "./roomStore";
+import { allowSocketRequest, corsOriginCheck } from "./security";
+import { setupSocketHandlers } from "./socketHandlers";
+import type { ClientToServerEvents, ServerToClientEvents } from "./types";
+
+export function createGameServer() {
+  const app = express();
+  app.disable("x-powered-by");
+  app.use(
+    helmet({
+      contentSecurityPolicy: false,
+      crossOriginEmbedderPolicy: false
+    })
+  );
+  app.use(
+    cors({
+      origin: corsOriginCheck,
+      methods: ["GET", "POST"],
+      optionsSuccessStatus: 204
+    })
+  );
+
+  const currentDir = path.dirname(fileURLToPath(import.meta.url));
+  const clientDistPath = path.resolve(currentDir, "../../client/dist");
+  const clientIndexPath = path.join(clientDistPath, "index.html");
+  const hasClientDist = existsSync(clientIndexPath);
+
+  app.get("/health", (_req, res) => {
+    res.json({ ok: true });
+  });
+
+  if (hasClientDist) {
+    app.use(express.static(clientDistPath, { index: false, maxAge: "1h" }));
+
+    app.get("*", (req, res, next) => {
+      if (req.path.startsWith("/socket.io") || req.path === "/health") {
+        next();
+        return;
+      }
+      res.sendFile(clientIndexPath);
+    });
+  }
+
+  const httpServer = http.createServer(app);
+  const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer, {
+    cors: {
+      origin: corsOriginCheck,
+      methods: ["GET", "POST"]
+    },
+    allowRequest: allowSocketRequest
+  });
+
+  const roomStore = new RoomStore();
+  setupSocketHandlers(io, roomStore);
+
+  async function start(port = PORT, host = HOST): Promise<number> {
+    await new Promise<void>((resolve) => {
+      httpServer.listen(port, host, () => resolve());
+    });
+    const address = httpServer.address();
+    if (typeof address === "object" && address && "port" in address) {
+      return address.port;
+    }
+    return port;
+  }
+
+  async function stop(): Promise<void> {
+    io.close();
+    await new Promise<void>((resolve, reject) => {
+      if (!httpServer.listening) {
+        resolve();
+        return;
+      }
+      httpServer.close((error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve();
+      });
+    });
+  }
+
+  return { app, io, httpServer, roomStore, start, stop };
+}
+
+const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+
+if (isMain) {
+  const server = createGameServer();
+  server
+    .start()
+    .then((port) => {
+      // eslint-disable-next-line no-console
+      console.log(`Server listening on http://${HOST}:${port}`);
+    })
+    .catch((error) => {
+      // eslint-disable-next-line no-console
+      console.error("Failed to start server", error);
+      process.exitCode = 1;
+    });
+}

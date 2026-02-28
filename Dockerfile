@@ -1,26 +1,17 @@
-FROM node:24-alpine AS builder
+FROM node:24-alpine
 WORKDIR /app
 
-COPY server/package.json server/package-lock.json ./server/
-COPY client/package.json client/package-lock.json ./client/
-RUN npm ci --prefix server && npm ci --prefix client
+COPY package.json ./
+RUN npm install
 
-COPY server ./server
-COPY client ./client
+COPY . .
 
-RUN npm run build --prefix client && npm run build --prefix server
-RUN npm prune --omit=dev --prefix server
-
-FROM node:24-alpine AS runner
-WORKDIR /app
-
-COPY --from=builder /app/server/package.json ./server/package.json
-COPY --from=builder /app/server/node_modules ./server/node_modules
-COPY --from=builder /app/server/dist ./server/dist
-COPY --from=builder /app/client/dist ./client/dist
+RUN npm run setup:mediapipe
+RUN npm run build
 
 ENV NODE_ENV=production
 ENV HOST=0.0.0.0
-EXPOSE 3001
+ENV PORT=3000
+EXPOSE 3000
 
-CMD ["node", "server/dist/index.js"]
+CMD ["npm", "run", "start"]
