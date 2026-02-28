@@ -2,7 +2,7 @@ import { CLIENT_SHOT_COOLDOWN_MS, type InputMode, WEBCAM_HEIGHT, WEBCAM_WIDTH } 
 import { GameEngine } from "./game/engine";
 import { MouseInputController } from "./input/mouse";
 import { createGameSocket } from "./net/socket";
-import type { MatchEnd } from "./types";
+import type { MatchEnd, PlayerView, WebRtcSignal } from "./types";
 import { createUI } from "./ui/ui";
 import { HandInputController } from "./vision/hands";
 
@@ -14,20 +14,21 @@ async function attachStream(videoElement: HTMLVideoElement, stream: MediaStream)
   if (videoElement.srcObject !== stream) {
     videoElement.srcObject = stream;
   }
-  await videoElement.play();
+  try {
+    await videoElement.play();
+  } catch {
+    // Hidden videos can reject autoplay; stream attachment still succeeds.
+  }
 }
 
-async function startWebcam(videoElement: HTMLVideoElement): Promise<MediaStream> {
-  const stream = await navigator.mediaDevices.getUserMedia({
+async function requestWebcamStream(): Promise<MediaStream> {
+  return navigator.mediaDevices.getUserMedia({
     video: {
       width: { ideal: WEBCAM_WIDTH },
       height: { ideal: WEBCAM_HEIGHT }
     },
     audio: false
   });
-
-  await attachStream(videoElement, stream);
-  return stream;
 }
 
 export function mountGame(appRoot: HTMLElement): () => void {
@@ -45,8 +46,212 @@ export function mountGame(appRoot: HTMLElement): () => void {
   let isHost = false;
   let currentAim = { x: 0.5, y: 0.5 };
   let mediaStream: MediaStream | null = null;
+  let peerConnection: RTCPeerConnection | null = null;
+  let remoteStream: MediaStream | null = null;
+  let peerId = "";
+  let pendingRemoteIce: RTCIceCandidateInit[] = [];
+  let makingOffer = false;
   let cameraTestInFlight = false;
   let disposed = false;
+
+  ui.setRemoteCameraVisible(false);
+  ui.setRemoteCameraStatus("Waiting for opponent to join...");
+  ui.setLocalCameraVisible(false);
+  ui.setLocalCameraStatus("Camera not connected yet.");
+
+  function clearRemoteStream(): void {
+    remoteStream = null;
+    ui.getRemoteWaitingVideoElement().srcObject = null;
+    ui.getRemotePlayingVideoElement().srcObject = null;
+    ui.setRemoteCameraVisible(false);
+  }
+
+  function clearLocalPreview(): void {
+    ui.getLocalWaitingVideoElement().srcObject = null;
+    ui.setLocalCameraVisible(false);
+  }
+
+  async function setLocalPreview(stream: MediaStream): Promise<void> {
+    await attachStream(ui.getLocalWaitingVideoElement(), stream);
+    ui.setLocalCameraVisible(true);
+    ui.setLocalCameraStatus("Your camera connected.");
+  }
+
+  async function setRemoteStream(stream: MediaStream): Promise<void> {
+    remoteStream = stream;
+    await Promise.all([
+      attachStream(ui.getRemoteWaitingVideoElement(), stream),
+      attachStream(ui.getRemotePlayingVideoElement(), stream)
+    ]);
+    ui.setRemoteCameraVisible(true);
+    ui.setRemoteCameraStatus("Opponent camera connected.");
+  }
+
+  async function ensureMediaStream(): Promise<MediaStream> {
+    if (!mediaStream) {
+      mediaStream = await requestWebcamStream();
+    }
+    await setLocalPreview(mediaStream);
+    return mediaStream;
+  }
+
+  function syncLocalTracksToPeer(): void {
+    if (!peerConnection || !mediaStream) {
+      return;
+    }
+
+    const existingTrackIds = new Set(
+      peerConnection
+        .getSenders()
+        .map((sender) => sender.track?.id)
+        .filter((id): id is string => Boolean(id))
+    );
+
+    for (const track of mediaStream.getTracks()) {
+      if (!existingTrackIds.has(track.id)) {
+        peerConnection.addTrack(track, mediaStream);
+      }
+    }
+  }
+
+  function sendSignal(targetId: string, signal: WebRtcSignal): void {
+    if (!roomCode || !targetId) {
+      return;
+    }
+    socket.emit("webrtc_signal", {
+      roomCode,
+      targetId,
+      signal
+    });
+  }
+
+  async function flushPendingRemoteIce(): Promise<void> {
+    if (!peerConnection || !peerConnection.remoteDescription || pendingRemoteIce.length === 0) {
+      return;
+    }
+
+    const candidates = pendingRemoteIce;
+    pendingRemoteIce = [];
+    for (const candidate of candidates) {
+      try {
+        await peerConnection.addIceCandidate(candidate);
+      } catch {
+        // Ignore malformed/stale candidates from previous negotiations.
+      }
+    }
+  }
+
+  function teardownPeerConnection(resetPeerId = true): void {
+    pendingRemoteIce = [];
+    makingOffer = false;
+
+    if (peerConnection) {
+      peerConnection.onicecandidate = null;
+      peerConnection.ontrack = null;
+      peerConnection.onconnectionstatechange = null;
+      peerConnection.close();
+      peerConnection = null;
+    }
+
+    if (resetPeerId) {
+      peerId = "";
+    }
+
+    clearRemoteStream();
+  }
+
+  function createPeerConnection(targetPeerId: string): RTCPeerConnection {
+    const pc = new RTCPeerConnection({
+      iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+    });
+
+    pc.onicecandidate = (event) => {
+      const candidate = event.candidate;
+      if (!candidate || !peerId || peerId !== targetPeerId) {
+        return;
+      }
+      sendSignal(targetPeerId, {
+        kind: "ice",
+        candidate: candidate.candidate,
+        sdpMid: candidate.sdpMid,
+        sdpMLineIndex: candidate.sdpMLineIndex
+      });
+    };
+
+    pc.ontrack = (event) => {
+      const [stream] = event.streams;
+      if (stream) {
+        void setRemoteStream(stream);
+        return;
+      }
+
+      if (!remoteStream) {
+        remoteStream = new MediaStream();
+      }
+      remoteStream.addTrack(event.track);
+      void setRemoteStream(remoteStream);
+    };
+
+    pc.onconnectionstatechange = () => {
+      if (pc.connectionState === "connecting") {
+        ui.setRemoteCameraStatus("Connecting opponent camera...");
+      } else if (pc.connectionState === "failed" || pc.connectionState === "disconnected") {
+        ui.setRemoteCameraStatus("Opponent camera unavailable.");
+        ui.setRemoteCameraVisible(false);
+      }
+    };
+
+    return pc;
+  }
+
+  function ensurePeerConnection(targetPeerId: string): RTCPeerConnection {
+    if (peerConnection && peerId === targetPeerId) {
+      return peerConnection;
+    }
+
+    teardownPeerConnection(false);
+    peerId = targetPeerId;
+    peerConnection = createPeerConnection(targetPeerId);
+    syncLocalTracksToPeer();
+    return peerConnection;
+  }
+
+  async function maybeCreateOffer(): Promise<void> {
+    const pc = peerConnection;
+    if (!isHost || !pc || !peerId || makingOffer) {
+      return;
+    }
+    if (pc.signalingState !== "stable" || pc.localDescription) {
+      return;
+    }
+
+    makingOffer = true;
+    try {
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      if (!offer.sdp) {
+        return;
+      }
+      sendSignal(peerId, { kind: "offer", sdp: offer.sdp });
+      ui.setRemoteCameraStatus("Connecting opponent camera...");
+    } catch {
+      ui.setRemoteCameraStatus("Failed to start opponent camera.");
+    } finally {
+      makingOffer = false;
+    }
+  }
+
+  async function ensurePeerSession(targetPeerId: string): Promise<void> {
+    ensurePeerConnection(targetPeerId);
+    try {
+      await ensureMediaStream();
+      syncLocalTracksToPeer();
+    } catch {
+      ui.setRemoteCameraStatus("Camera permission needed for sharing.");
+      return;
+    }
+    await maybeCreateOffer();
+  }
 
   function setAim(x: number, y: number): void {
     currentAim = { x: clamp01(x), y: clamp01(y) };
@@ -105,24 +310,15 @@ export function mountGame(appRoot: HTMLElement): () => void {
     }
 
     const video = ui.getVideoElement();
-    if (!mediaStream) {
-      try {
-        mediaStream = await startWebcam(video);
-      } catch {
-        ui.setTrackingStatus("Camera unavailable. Mouse mode active");
-        handAvailable = false;
-        applyInputMode("mouse");
-        return;
-      }
-    } else {
-      try {
-        await attachStream(video, mediaStream);
-      } catch {
-        ui.setTrackingStatus("Camera unavailable. Mouse mode active");
-        handAvailable = false;
-        applyInputMode("mouse");
-        return;
-      }
+    try {
+      const stream = await ensureMediaStream();
+      await attachStream(video, stream);
+      syncLocalTracksToPeer();
+    } catch {
+      ui.setTrackingStatus("Camera unavailable. Mouse mode active");
+      handAvailable = false;
+      applyInputMode("mouse");
+      return;
     }
 
     if (!handController) {
@@ -165,20 +361,41 @@ export function mountGame(appRoot: HTMLElement): () => void {
 
     try {
       const testVideo = ui.getCameraTestVideoElement();
-      if (!mediaStream) {
-        mediaStream = await startWebcam(testVideo);
-      } else {
-        await attachStream(testVideo, mediaStream);
-      }
+      const stream = await ensureMediaStream();
+      await attachStream(testVideo, stream);
+      syncLocalTracksToPeer();
       ui.setCameraTestPreviewVisible(true);
       ui.setCameraTestStatus("Camera looks good.");
     } catch {
       ui.setCameraTestPreviewVisible(false);
       ui.setCameraTestStatus("Camera unavailable or permission denied.");
+      ui.setLocalCameraStatus("Camera unavailable or permission denied.");
+      ui.setLocalCameraVisible(false);
     } finally {
       ui.setCameraTestBusy(false);
       cameraTestInFlight = false;
     }
+  }
+
+  function getOpponent(players: PlayerView[]): PlayerView | undefined {
+    return players.find((player) => player.id !== selfPlayerId);
+  }
+
+  async function reconcilePeerForRoom(players: PlayerView[]): Promise<void> {
+    const opponent = getOpponent(players);
+    if (!opponent) {
+      teardownPeerConnection();
+      ui.setRemoteCameraStatus("Waiting for opponent to join...");
+      return;
+    }
+
+    if (peerId !== opponent.id) {
+      teardownPeerConnection(false);
+      peerId = opponent.id;
+      ui.setRemoteCameraStatus("Connecting opponent camera...");
+    }
+
+    await ensurePeerSession(opponent.id);
   }
 
   ui.onCreateRoom((name) => {
@@ -253,6 +470,8 @@ export function mountGame(appRoot: HTMLElement): () => void {
 
   socket.on("disconnect", () => {
     ui.setStatus("Disconnected from server");
+    teardownPeerConnection();
+    ui.setRemoteCameraStatus("Disconnected from opponent camera.");
   });
 
   socket.on("error_event", (payload) => {
@@ -288,6 +507,67 @@ export function mountGame(appRoot: HTMLElement): () => void {
     if (!isPlaying) {
       ui.showWaiting();
     }
+
+    void reconcilePeerForRoom(payload.players);
+  });
+
+  socket.on("webrtc_signal", (payload) => {
+    if (!roomCode || payload.roomCode !== roomCode || payload.fromId === selfPlayerId) {
+      return;
+    }
+
+    if (!peerId || peerId !== payload.fromId) {
+      teardownPeerConnection(false);
+      peerId = payload.fromId;
+    }
+
+    const pc = ensurePeerConnection(payload.fromId);
+
+    const handleSignal = async () => {
+      if (payload.signal.kind === "offer") {
+        try {
+          await ensureMediaStream();
+          syncLocalTracksToPeer();
+        } catch {
+          ui.setRemoteCameraStatus("Camera permission needed for sharing.");
+        }
+
+        await pc.setRemoteDescription({ type: "offer", sdp: payload.signal.sdp });
+        await flushPendingRemoteIce();
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        if (answer.sdp) {
+          sendSignal(payload.fromId, { kind: "answer", sdp: answer.sdp });
+        }
+        ui.setRemoteCameraStatus("Connecting opponent camera...");
+        return;
+      }
+
+      if (payload.signal.kind === "answer") {
+        if (pc.signalingState !== "have-local-offer") {
+          return;
+        }
+        await pc.setRemoteDescription({ type: "answer", sdp: payload.signal.sdp });
+        await flushPendingRemoteIce();
+        return;
+      }
+
+      const candidate: RTCIceCandidateInit = {
+        candidate: payload.signal.candidate,
+        sdpMid: payload.signal.sdpMid ?? undefined,
+        sdpMLineIndex: payload.signal.sdpMLineIndex ?? undefined
+      };
+
+      if (!pc.remoteDescription) {
+        pendingRemoteIce.push(candidate);
+        return;
+      }
+      await pc.addIceCandidate(candidate);
+    };
+
+    void handleSignal().catch(() => {
+      ui.setRemoteCameraStatus("Failed to connect opponent camera.");
+    });
   });
 
   socket.on("match_start", async () => {
@@ -311,6 +591,8 @@ export function mountGame(appRoot: HTMLElement): () => void {
   });
 
   const releaseMedia = () => {
+    teardownPeerConnection();
+
     if (mediaStream) {
       for (const track of mediaStream.getTracks()) {
         track.stop();
@@ -319,7 +601,10 @@ export function mountGame(appRoot: HTMLElement): () => void {
     }
     ui.getVideoElement().srcObject = null;
     ui.getCameraTestVideoElement().srcObject = null;
+    clearLocalPreview();
     ui.setCameraTestPreviewVisible(false);
+    ui.setLocalCameraStatus("Camera not connected yet.");
+    ui.setRemoteCameraStatus("Waiting for opponent to join...");
   };
 
   const beforeUnloadHandler = () => {

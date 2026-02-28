@@ -254,6 +254,27 @@ input {
   display: block;
 }
 
+.local-video,
+.remote-video {
+  display: none;
+  width: min(100%, 360px);
+  aspect-ratio: 4 / 3;
+  margin-top: 0.45rem;
+  border-radius: 12px;
+  border: 2px solid rgba(255, 224, 150, 0.34);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+  object-fit: cover;
+  background: #0b0b0b;
+}
+
+.remote-video.active {
+  display: block;
+}
+
+.local-video.active {
+  display: block;
+}
+
 .waiting-actions {
   justify-content: center;
   margin: 0.55rem 0;
@@ -350,13 +371,6 @@ input {
 
 .webcam {
   object-fit: cover;
-}
-
-.webcam,
-.camera-test-video {
-  -webkit-transform: scaleX(-1);
-  transform: scaleX(-1);
-  transform-origin: center;
 }
 
 .hud {

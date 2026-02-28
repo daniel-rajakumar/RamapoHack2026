@@ -13,6 +13,10 @@ export interface UIController {
   setCameraTestStatus(message: string): void;
   setCameraTestPreviewVisible(visible: boolean): void;
   setCameraTestBusy(isBusy: boolean): void;
+  setLocalCameraStatus(message: string): void;
+  setLocalCameraVisible(visible: boolean): void;
+  setRemoteCameraStatus(message: string): void;
+  setRemoteCameraVisible(visible: boolean): void;
   setRoomCode(roomCode: string): void;
   setWaitingPlayers(players: PlayerView[], selfId?: string): void;
   setPlayingPlayers(players: PlayerView[], selfId?: string): void;
@@ -26,6 +30,9 @@ export interface UIController {
   showResults(payload: MatchEnd, selfId?: string): void;
   getVideoElement(): HTMLVideoElement;
   getCameraTestVideoElement(): HTMLVideoElement;
+  getLocalWaitingVideoElement(): HTMLVideoElement;
+  getRemoteWaitingVideoElement(): HTMLVideoElement;
+  getRemotePlayingVideoElement(): HTMLVideoElement;
   getOverlayElement(): HTMLDivElement;
   getStageElement(): HTMLDivElement;
 }
@@ -106,6 +113,16 @@ export function createUI(root: HTMLElement): UIController {
           <h3>Party</h3>
           <ul class="players" id="waiting-players"></ul>
         </div>
+        <div class="score-panel">
+          <h3>Your Camera</h3>
+          <video id="local-video-waiting" class="local-video" autoplay playsinline muted></video>
+          <p id="local-status-waiting" class="status">Camera not connected yet.</p>
+        </div>
+        <div class="score-panel">
+          <h3>Opponent Camera</h3>
+          <video id="remote-video-waiting" class="remote-video" autoplay playsinline></video>
+          <p id="remote-status-waiting" class="status">Waiting for opponent camera...</p>
+        </div>
         <div class="row waiting-actions">
           <button id="start-match" class="gold-btn wide" disabled>Start Match</button>
         </div>
@@ -135,6 +152,11 @@ export function createUI(root: HTMLElement): UIController {
         <div class="score-panel">
           <h3>Scoreboard</h3>
           <ul class="players" id="hud-players"></ul>
+        </div>
+        <div class="score-panel">
+          <h3>Opponent Camera</h3>
+          <video id="remote-video-playing" class="remote-video" autoplay playsinline></video>
+          <p id="remote-status-playing" class="status">Waiting for opponent camera...</p>
         </div>
       </section>
 
@@ -171,12 +193,18 @@ export function createUI(root: HTMLElement): UIController {
   const waitingStatus = root.querySelector("#waiting-status") as HTMLElement;
   const waitingRole = root.querySelector("#waiting-role") as HTMLElement;
   const waitingPlayers = root.querySelector("#waiting-players") as HTMLUListElement;
+  const localStatusWaiting = root.querySelector("#local-status-waiting") as HTMLElement;
+  const localVideoWaiting = root.querySelector("#local-video-waiting") as HTMLVideoElement;
+  const remoteStatusWaiting = root.querySelector("#remote-status-waiting") as HTMLElement;
+  const remoteVideoWaiting = root.querySelector("#remote-video-waiting") as HTMLVideoElement;
 
   const hudRoomCode = root.querySelector("#hud-room-code") as HTMLElement;
   const hudTimer = root.querySelector("#hud-timer") as HTMLElement;
   const trackingStatus = root.querySelector("#tracking-status") as HTMLElement;
   const hudPlayers = root.querySelector("#hud-players") as HTMLUListElement;
   const inputMode = root.querySelector("#input-mode") as HTMLSelectElement;
+  const remoteStatusPlaying = root.querySelector("#remote-status-playing") as HTMLElement;
+  const remoteVideoPlaying = root.querySelector("#remote-video-playing") as HTMLVideoElement;
 
   const resultsTitle = root.querySelector("#results-title") as HTMLElement;
   const resultsReason = root.querySelector("#results-reason") as HTMLElement;
@@ -233,6 +261,20 @@ export function createUI(root: HTMLElement): UIController {
     setCameraTestBusy(isBusy) {
       testCameraButton.disabled = isBusy;
       testCameraButton.textContent = isBusy ? "Testing..." : "Test Camera";
+    },
+    setLocalCameraStatus(message) {
+      localStatusWaiting.textContent = message;
+    },
+    setLocalCameraVisible(visible) {
+      localVideoWaiting.classList.toggle("active", visible);
+    },
+    setRemoteCameraStatus(message) {
+      remoteStatusWaiting.textContent = message;
+      remoteStatusPlaying.textContent = message;
+    },
+    setRemoteCameraVisible(visible) {
+      remoteVideoWaiting.classList.toggle("active", visible);
+      remoteVideoPlaying.classList.toggle("active", visible);
     },
     setRoomCode(roomCode) {
       waitingRoomCode.textContent = roomCode;
@@ -301,6 +343,15 @@ export function createUI(root: HTMLElement): UIController {
     },
     getCameraTestVideoElement() {
       return cameraTestVideo;
+    },
+    getLocalWaitingVideoElement() {
+      return localVideoWaiting;
+    },
+    getRemoteWaitingVideoElement() {
+      return remoteVideoWaiting;
+    },
+    getRemotePlayingVideoElement() {
+      return remoteVideoPlaying;
     },
     getOverlayElement() {
       return overlayElement;

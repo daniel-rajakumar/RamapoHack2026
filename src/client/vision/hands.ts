@@ -110,7 +110,7 @@ export class HandInputController {
         if (landmarks && landmarks[4] && landmarks[8]) {
           this.lastSeenAt = Date.now();
 
-          const rawX = 1 - landmarks[8].x;
+          const rawX = landmarks[8].x;
           const rawY = landmarks[8].y;
 
           this.smoothX += (rawX - this.smoothX) * AIM_SMOOTH_ALPHA;

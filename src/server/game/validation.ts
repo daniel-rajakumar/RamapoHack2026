@@ -1,5 +1,5 @@
 import { ROOM_CODE_LENGTH } from "./config";
-import type { ErrorCode, ShootReq } from "./types";
+import type { ErrorCode, ShootReq, WebRtcSignalReq } from "./types";
 
 const ROOM_CODE_REGEX = /^[A-Z0-9]+$/;
 const SAFE_NAME_REGEX = /^[A-Za-z0-9 _.-]+$/;
@@ -62,6 +62,74 @@ export function validateShootPayload(rawPayload: unknown):
       t: payload.t
     }
   };
+}
+
+export function validateWebRtcSignalPayload(rawPayload: unknown):
+  | { ok: true; data: WebRtcSignalReq }
+  | { ok: false; code: ErrorCode } {
+  if (!rawPayload || typeof rawPayload !== "object") {
+    return { ok: false, code: "INVALID_SIGNAL" };
+  }
+
+  const payload = rawPayload as Partial<WebRtcSignalReq>;
+  const roomCode = normalizeRoomCode(payload.roomCode);
+  if (!roomCode) {
+    return { ok: false, code: "INVALID_SIGNAL" };
+  }
+
+  if (typeof payload.targetId !== "string" || payload.targetId.trim().length === 0) {
+    return { ok: false, code: "INVALID_SIGNAL" };
+  }
+
+  const signal = payload.signal;
+  if (!signal || typeof signal !== "object") {
+    return { ok: false, code: "INVALID_SIGNAL" };
+  }
+
+  if (signal.kind === "offer" || signal.kind === "answer") {
+    if (typeof signal.sdp !== "string" || signal.sdp.length === 0) {
+      return { ok: false, code: "INVALID_SIGNAL" };
+    }
+    return {
+      ok: true,
+      data: {
+        roomCode,
+        targetId: payload.targetId,
+        signal: { kind: signal.kind, sdp: signal.sdp }
+      }
+    };
+  }
+
+  if (signal.kind === "ice") {
+    if (typeof signal.candidate !== "string" || signal.candidate.length === 0) {
+      return { ok: false, code: "INVALID_SIGNAL" };
+    }
+    if (signal.sdpMid !== undefined && signal.sdpMid !== null && typeof signal.sdpMid !== "string") {
+      return { ok: false, code: "INVALID_SIGNAL" };
+    }
+    if (
+      signal.sdpMLineIndex !== undefined &&
+      signal.sdpMLineIndex !== null &&
+      (typeof signal.sdpMLineIndex !== "number" || !Number.isFinite(signal.sdpMLineIndex))
+    ) {
+      return { ok: false, code: "INVALID_SIGNAL" };
+    }
+    return {
+      ok: true,
+      data: {
+        roomCode,
+        targetId: payload.targetId,
+        signal: {
+          kind: "ice",
+          candidate: signal.candidate,
+          sdpMid: signal.sdpMid,
+          sdpMLineIndex: signal.sdpMLineIndex
+        }
+      }
+    };
+  }
+
+  return { ok: false, code: "INVALID_SIGNAL" };
 }
 
 export function clamp01(value: number): number {

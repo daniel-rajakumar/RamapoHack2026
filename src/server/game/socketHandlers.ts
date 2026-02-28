@@ -5,7 +5,7 @@ import { endMatch, clearRoomIntervals, emitStateUpdate, startMatch } from "./mat
 import { toPlayerViews, RoomStore } from "./roomStore";
 import { getTimeRemainingMs } from "./shoot";
 import type { ClientToServerEvents, ErrorCode, ServerToClientEvents } from "./types";
-import { normalizeRoomCode, validateName, validateShootPayload } from "./validation";
+import { normalizeRoomCode, validateName, validateShootPayload, validateWebRtcSignalPayload } from "./validation";
 
 type IoServer = Server<ClientToServerEvents, ServerToClientEvents>;
 type GameSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
@@ -224,6 +224,41 @@ export function setupSocketHandlers(io: IoServer, roomStore: RoomStore): void {
         y: validation.data.y,
         receivedAt: Date.now(),
         t: validation.data.t
+      });
+    });
+
+    socket.on("webrtc_signal", (payload) => {
+      if (!consumeControlEvent(controlWindows, socket.id)) {
+        emitError(io, socket.id, "RATE_LIMITED");
+        return;
+      }
+
+      const validation = validateWebRtcSignalPayload(payload);
+      if (!validation.ok) {
+        emitError(io, socket.id, validation.code);
+        return;
+      }
+
+      const room = roomStore.getRoom(validation.data.roomCode);
+      if (!room) {
+        emitError(io, socket.id, "ROOM_NOT_FOUND");
+        return;
+      }
+
+      if (!room.players.has(socket.id) || !room.players.has(validation.data.targetId)) {
+        emitError(io, socket.id, "ROOM_NOT_FOUND");
+        return;
+      }
+
+      if (validation.data.targetId === socket.id) {
+        emitError(io, socket.id, "INVALID_SIGNAL");
+        return;
+      }
+
+      io.to(validation.data.targetId).emit("webrtc_signal", {
+        roomCode: room.roomCode,
+        fromId: socket.id,
+        signal: validation.data.signal
       });
     });
 
