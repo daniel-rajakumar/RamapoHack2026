@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { MATCH_DURATION_MS } from "../config.js";
-import { processQueuedShot, processQueuedTwoGunShot } from "../shoot.js";
+import { processQueuedShot } from "../shoot.js";
 import type { Room } from "../types.js";
 
 function makeRoom(): Room {
@@ -14,7 +14,7 @@ function makeRoom(): Room {
     started: true,
     startTime: 0,
     durationMs: MATCH_DURATION_MS,
-    twoGuns: false,
+    inputMode: "hand",
     targets: [{ id: 1, x: 0.5, y: 0.5, r: 0.1, alive: true }],
     nextTargetId: 2,
     lastShotAtByPlayer: new Map(),
@@ -89,23 +89,4 @@ describe("processQueuedShot", () => {
     expect(result.errorCode).toBe("MATCH_NOT_STARTED");
   });
 
-  it("applies two-gun spread as two shot results", () => {
-    const room = makeRoom();
-    room.targets = [
-      { id: 1, x: 0.42, y: 0.5, r: 0.09, alive: true },
-      { id: 2, x: 0.58, y: 0.5, r: 0.09, alive: true }
-    ];
-    room.nextTargetId = 3;
-
-    const results = processQueuedTwoGunShot(
-      room,
-      { shooterId: "p1", x: 0.5, y: 0.5, receivedAt: 1000 },
-      0.08,
-      1000
-    );
-
-    const hitCount = results.filter((result) => result.hit).length;
-    expect(hitCount).toBe(2);
-    expect(room.players.get("p1")?.score).toBe(2);
-  });
 });

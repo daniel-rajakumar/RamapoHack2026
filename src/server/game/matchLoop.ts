@@ -1,6 +1,6 @@
 import type { Server } from "socket.io";
-import { BROADCAST_MS, MATCH_START_COUNTDOWN_MS, SIM_TICK_MS, TARGET_COUNT, TWO_GUN_SPREAD } from "./config";
-import { processQueuedShot, processQueuedTwoGunShot, getTimeRemainingMs } from "./shoot";
+import { BROADCAST_MS, MATCH_START_COUNTDOWN_MS, SIM_TICK_MS, TARGET_COUNT } from "./config";
+import { processQueuedShot, getTimeRemainingMs } from "./shoot";
 import { createInitialTargets, toTargetViews } from "./targets";
 import { toPlayerViews } from "./roomStore";
 import type { ClientToServerEvents, Room, ServerToClientEvents } from "./types";
@@ -92,9 +92,7 @@ function runSimulationTick(io: IoServer, room: Room): void {
     }
 
     const now = Date.now();
-    const results = room.twoGuns
-      ? processQueuedTwoGunShot(room, shot, TWO_GUN_SPREAD, now)
-      : [processQueuedShot(room, shot, now)];
+    const results = [processQueuedShot(room, shot, now)];
 
     for (const result of results) {
       if (!result.accepted) {
@@ -149,8 +147,8 @@ export function startMatch(io: IoServer, room: Room): void {
     roomCode: room.roomCode,
     startTime: room.startTime,
     durationMs: room.durationMs,
-    twoGuns: room.twoGuns,
-    countdownMs: MATCH_START_COUNTDOWN_MS
+    countdownMs: MATCH_START_COUNTDOWN_MS,
+    inputMode: room.inputMode
   });
 
   emitStateUpdate(io, room);

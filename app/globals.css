@@ -483,6 +483,16 @@ input {
 
 .webcam {
   object-fit: cover;
+  z-index: 1;
+}
+
+.overlay-root {
+  z-index: 2;
+}
+
+.stage-frame,
+.start-countdown {
+  z-index: 3;
 }
 
 .webcam,

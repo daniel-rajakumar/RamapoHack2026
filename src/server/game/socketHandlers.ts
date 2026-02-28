@@ -38,7 +38,7 @@ function emitRoomUpdate(io: IoServer, roomCode: string, roomStore: RoomStore): v
     hostId: room.hostSocketId,
     started: room.started,
     durationMs: room.durationMs,
-    twoGuns: room.twoGuns
+    inputMode: room.inputMode
   });
 }
 
@@ -210,8 +210,8 @@ export function setupSocketHandlers(io: IoServer, roomStore: RoomStore): void {
       if (validation.data.durationMs !== undefined) {
         room.durationMs = validation.data.durationMs;
       }
-      if (validation.data.twoGuns !== undefined) {
-        room.twoGuns = validation.data.twoGuns;
+      if (validation.data.inputMode !== undefined) {
+        room.inputMode = validation.data.inputMode;
       }
 
       startMatch(io, room);

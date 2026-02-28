@@ -34,7 +34,6 @@ export const TARGET_COUNT = 5;
 export const TARGET_RADIUS = 0.05;
 export const TARGET_X_RANGE: readonly [number, number] = [0.15, 0.85];
 export const TARGET_Y_RANGE: readonly [number, number] = [0.15, 0.85];
-export const TWO_GUN_SPREAD = 0.08;
 
 export const SERVER_SHOT_COOLDOWN_MS = 200;
 export const SERVER_RATE_LIMIT_PER_SEC = 8;

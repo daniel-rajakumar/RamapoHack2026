@@ -7,12 +7,14 @@ export type RadiusToScene = (r: number) => number;
 export class TargetMeshManager {
   private readonly meshes = new Map<number, THREE.Mesh>();
 
-  private readonly geometry = new THREE.SphereGeometry(1, 20, 14);
+  private readonly geometry = new THREE.CircleGeometry(1, 36);
 
-  private readonly material = new THREE.MeshStandardMaterial({
-    color: 0xff8c1a,
-    roughness: 0.45,
-    metalness: 0.15
+  private readonly material = new THREE.MeshBasicMaterial({
+    color: 0xff3b30,
+    transparent: true,
+    opacity: 0.98,
+    depthTest: false,
+    depthWrite: false
   });
 
   constructor(
@@ -29,6 +31,7 @@ export class TargetMeshManager {
       let mesh = this.meshes.get(target.id);
       if (!mesh) {
         mesh = new THREE.Mesh(this.geometry, this.material);
+        mesh.renderOrder = 10;
         this.meshes.set(target.id, mesh);
         this.scene.add(mesh);
       }

@@ -10,7 +10,6 @@ export interface UIController {
   onTestCamera(handler: () => void): void;
   onInputModeChange(handler: (mode: InputMode) => void): void;
   onMatchDurationChange(handler: (seconds: number) => void): void;
-  onTwoGunsChange(handler: (enabled: boolean) => void): void;
   setStatus(message: string): void;
   setCameraTestStatus(message: string): void;
   setCameraTestPreviewVisible(visible: boolean): void;
@@ -23,8 +22,6 @@ export interface UIController {
   setRemoteCameraVisible(visible: boolean): void;
   setMatchDurationSeconds(seconds: number): void;
   setMatchDurationEditable(editable: boolean): void;
-  setTwoGunsEnabled(enabled: boolean): void;
-  setTwoGunsEditable(editable: boolean): void;
   setRoomCode(roomCode: string): void;
   setWaitingPlayers(players: PlayerView[], selfId?: string): void;
   setPlayingPlayers(players: PlayerView[], selfId?: string): void;
@@ -160,10 +157,11 @@ export function createUI(root: HTMLElement): UIController {
             <option value="90">90s</option>
             <option value="120">120s</option>
           </select>
-          <label for="two-guns-select">Two Guns</label>
-          <select id="two-guns-select">
-            <option value="off" selected>Off</option>
-            <option value="on">On</option>
+          <label for="waiting-input-mode">Input Mode</label>
+          <select id="waiting-input-mode">
+            <option value="hand">Hand</option>
+            <option value="eye">Eye (Blink Shoot)</option>
+            <option value="mouse">Mouse</option>
           </select>
         </div>
         <div class="row waiting-actions">
@@ -200,14 +198,7 @@ export function createUI(root: HTMLElement): UIController {
               <div class="badge">Room: <strong id="hud-room-code">----</strong></div>
               <div class="badge">Time: <strong id="hud-timer">60.0s</strong></div>
               <div class="badge">Tracking: <strong id="tracking-status">Initializing</strong></div>
-              <label class="badge" for="input-mode">
-                Input
-                <select id="input-mode">
-                  <option value="hand">Hand</option>
-                  <option value="eye">Eye (Blink Shoot)</option>
-                  <option value="mouse">Mouse</option>
-                </select>
-              </label>
+              <div class="badge">Input: <strong id="hud-input-mode">Hand</strong></div>
             </div>
           </div>
 
@@ -270,7 +261,7 @@ export function createUI(root: HTMLElement): UIController {
   const remoteStatusWaiting = root.querySelector("#remote-status-waiting") as HTMLElement;
   const remoteVideoWaiting = root.querySelector("#remote-video-waiting") as HTMLVideoElement;
   const matchDurationSelect = root.querySelector("#match-duration-select") as HTMLSelectElement;
-  const twoGunsSelect = root.querySelector("#two-guns-select") as HTMLSelectElement;
+  const waitingInputMode = root.querySelector("#waiting-input-mode") as HTMLSelectElement;
   const localStatusPlaying = root.querySelector("#local-status-playing") as HTMLElement;
   const localVideoPlaying = root.querySelector("#local-video-playing") as HTMLVideoElement;
 
@@ -278,8 +269,8 @@ export function createUI(root: HTMLElement): UIController {
   const hudTimer = root.querySelector("#hud-timer") as HTMLElement;
   const startCountdown = root.querySelector("#start-countdown") as HTMLElement;
   const trackingStatus = root.querySelector("#tracking-status") as HTMLElement;
+  const hudInputMode = root.querySelector("#hud-input-mode") as HTMLElement;
   const inputModeLobby = root.querySelector("#input-mode-lobby") as HTMLSelectElement;
-  const inputModePlaying = root.querySelector("#input-mode") as HTMLSelectElement;
   const remoteStatusPlaying = root.querySelector("#remote-status-playing") as HTMLElement;
   const remoteVideoPlaying = root.querySelector("#remote-video-playing") as HTMLVideoElement;
   const statsSelfCard = root.querySelector("#stats-self-card") as HTMLElement;
@@ -332,19 +323,14 @@ export function createUI(root: HTMLElement): UIController {
       inputModeLobby.addEventListener("change", () => {
         handler(parseInputMode(inputModeLobby.value));
       });
-      inputModePlaying.addEventListener("change", () => {
-        handler(parseInputMode(inputModePlaying.value));
+      waitingInputMode.addEventListener("change", () => {
+        handler(parseInputMode(waitingInputMode.value));
       });
     },
     onMatchDurationChange(handler) {
       matchDurationSelect.addEventListener("change", () => {
         const parsed = Number(matchDurationSelect.value);
         handler(Number.isFinite(parsed) ? parsed : 60);
-      });
-    },
-    onTwoGunsChange(handler) {
-      twoGunsSelect.addEventListener("change", () => {
-        handler(twoGunsSelect.value === "on");
       });
     },
     setStatus(message) {
@@ -389,12 +375,6 @@ export function createUI(root: HTMLElement): UIController {
     },
     setMatchDurationEditable(editable) {
       matchDurationSelect.disabled = !editable;
-    },
-    setTwoGunsEnabled(enabled) {
-      twoGunsSelect.value = enabled ? "on" : "off";
-    },
-    setTwoGunsEditable(editable) {
-      twoGunsSelect.disabled = !editable;
     },
     setRoomCode(roomCode) {
       waitingRoomCode.textContent = roomCode;
@@ -457,7 +437,8 @@ export function createUI(root: HTMLElement): UIController {
     },
     setInputMode(mode) {
       inputModeLobby.value = mode;
-      inputModePlaying.value = mode;
+      waitingInputMode.value = mode;
+      hudInputMode.textContent = mode === "eye" ? "Eye (Blink)" : mode === "mouse" ? "Mouse" : "Hand";
     },
     setWaitingControls({ isHost, canStart, started, playerCount }) {
       startMatchButton.disabled = !canStart;
@@ -475,7 +456,7 @@ export function createUI(root: HTMLElement): UIController {
         waitingRole.textContent = "Waiting for host to start the match.";
       }
       matchDurationSelect.disabled = !(isHost && !started);
-      twoGunsSelect.disabled = !(isHost && !started);
+      waitingInputMode.disabled = !(isHost && !started);
     },
     showLobby() {
       setActiveScreen("lobby");

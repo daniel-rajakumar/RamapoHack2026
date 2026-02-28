@@ -3,6 +3,7 @@ import type { AimUpdateReq, ErrorCode, ShootReq, StartMatchReq, WebRtcSignalReq 
 
 const ROOM_CODE_REGEX = /^[A-Z]+$/;
 const SAFE_NAME_REGEX = /^[A-Za-z0-9 _.-]+$/;
+const INPUT_MODE_SET = new Set(["hand", "eye", "mouse"]);
 
 export function validateName(rawName: unknown): string | null {
   if (typeof rawName !== "string") {
@@ -118,9 +119,10 @@ export function validateStartMatchPayload(rawPayload: unknown):
       return { ok: false, code: "INVALID_SETTINGS" };
     }
   }
-
-  if (payload.twoGuns !== undefined && typeof payload.twoGuns !== "boolean") {
-    return { ok: false, code: "INVALID_SETTINGS" };
+  if (payload.inputMode !== undefined) {
+    if (typeof payload.inputMode !== "string" || !INPUT_MODE_SET.has(payload.inputMode)) {
+      return { ok: false, code: "INVALID_SETTINGS" };
+    }
   }
 
   return {
@@ -128,7 +130,7 @@ export function validateStartMatchPayload(rawPayload: unknown):
     data: {
       roomCode,
       durationMs: payload.durationMs,
-      twoGuns: payload.twoGuns
+      inputMode: payload.inputMode
     }
   };
 }

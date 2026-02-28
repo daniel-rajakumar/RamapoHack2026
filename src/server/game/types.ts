@@ -15,12 +15,13 @@ export type ErrorCode =
 export type PlayerView = { id: string; name: string; score: number };
 export type TargetView = { id: number; x: number; y: number; r: number };
 export type AimView = { id: string; x: number; y: number };
+export type InputModeSetting = "hand" | "eye" | "mouse";
 
 export type CreateRoomReq = { name: string };
 export type JoinRoomReq = { roomCode: string; name: string };
 export type ShootReq = { roomCode: string; x: number; y: number; t?: number };
 export type AimUpdateReq = { roomCode: string; x: number; y: number };
-export type StartMatchReq = { roomCode: string; durationMs?: number; twoGuns?: boolean };
+export type StartMatchReq = { roomCode: string; durationMs?: number; inputMode?: InputModeSetting };
 export type WebRtcSignalReq = {
   roomCode: string;
   targetId: string;
@@ -44,9 +45,15 @@ export type RoomUpdate = {
   hostId: string;
   started: boolean;
   durationMs: number;
-  twoGuns: boolean;
+  inputMode: InputModeSetting;
 };
-export type MatchStart = { roomCode: string; startTime: number; durationMs: number; twoGuns: boolean; countdownMs: number };
+export type MatchStart = {
+  roomCode: string;
+  startTime: number;
+  durationMs: number;
+  countdownMs: number;
+  inputMode: InputModeSetting;
+};
 export type StateUpdate = {
   roomCode: string;
   players: PlayerView[];
@@ -137,7 +144,7 @@ export interface Room {
   started: boolean;
   startTime: number;
   durationMs: number;
-  twoGuns: boolean;
+  inputMode: InputModeSetting;
   targets: TargetState[];
   nextTargetId: number;
   lastShotAtByPlayer: Map<string, number>;

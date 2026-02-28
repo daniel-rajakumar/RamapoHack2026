@@ -34,7 +34,7 @@ export class RoomStore {
       started: false,
       startTime: 0,
       durationMs: MATCH_DURATION_MS,
-      twoGuns: false,
+      inputMode: "hand",
       targets: createInitialTargets(0, 0),
       nextTargetId: 1,
       lastShotAtByPlayer: new Map(),

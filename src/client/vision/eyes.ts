@@ -4,7 +4,6 @@ import {
   CDN_FACE_MODEL_PATH,
   CDN_MEDIAPIPE_WASM_ROOT,
   CLIENT_SHOT_COOLDOWN_MS,
-  EYE_AIM_GAIN,
   EYE_AIM_SMOOTH_ALPHA,
   LOCAL_FACE_MODEL_PATH,
   LOCAL_MEDIAPIPE_WASM_ROOT,
@@ -23,16 +22,8 @@ export interface EyeInputCallbacks {
   onStatus: (message: string) => void;
 }
 
-const LEFT_IRIS_INDICES = [468, 469, 470, 471, 472] as const;
-const RIGHT_IRIS_INDICES = [473, 474, 475, 476, 477] as const;
-const LEFT_EYE_INNER_INDEX = 362;
-const LEFT_EYE_OUTER_INDEX = 263;
-const LEFT_EYE_UPPER_INDEX = 386;
-const LEFT_EYE_LOWER_INDEX = 374;
-const RIGHT_EYE_INNER_INDEX = 133;
-const RIGHT_EYE_OUTER_INDEX = 33;
-const RIGHT_EYE_UPPER_INDEX = 159;
-const RIGHT_EYE_LOWER_INDEX = 145;
+const NOSE_TRACK_INDICES = [1, 4, 5, 6] as const;
+const NOSE_AIM_GAIN = 1.8;
 
 let tfliteInfoLogFilterInstalled = false;
 
@@ -82,43 +73,6 @@ function averagePoint(landmarks: Point2D[], indices: readonly number[]): Point2D
   }
 
   return { x: sumX / count, y: sumY / count };
-}
-
-function axisRatio(value: number, axisA: number, axisB: number): number | null {
-  const minValue = Math.min(axisA, axisB);
-  const maxValue = Math.max(axisA, axisB);
-  const range = maxValue - minValue;
-  if (range < 1e-4) {
-    return null;
-  }
-  return clamp01((value - minValue) / range);
-}
-
-function getEyeGaze(
-  landmarks: Point2D[],
-  irisIndices: readonly number[],
-  innerIndex: number,
-  outerIndex: number,
-  upperIndex: number,
-  lowerIndex: number
-): { x: number; y: number } | null {
-  const irisCenter = averagePoint(landmarks, irisIndices);
-  const inner = landmarks[innerIndex];
-  const outer = landmarks[outerIndex];
-  const upper = landmarks[upperIndex];
-  const lower = landmarks[lowerIndex];
-
-  if (!irisCenter || !inner || !outer || !upper || !lower) {
-    return null;
-  }
-
-  const horizontalRatio = axisRatio(irisCenter.x, inner.x, outer.x);
-  const verticalRatio = axisRatio(irisCenter.y, upper.y, lower.y);
-  if (horizontalRatio === null || verticalRatio === null) {
-    return null;
-  }
-
-  return { x: horizontalRatio, y: verticalRatio };
 }
 
 function getBlendshapeScore(blendshapes: Classifications[] | undefined, name: string): number {
@@ -215,34 +169,11 @@ export class EyeInputController {
         if (faceLandmarks) {
           this.lastSeenAt = Date.now();
 
-          const leftEyeGaze = getEyeGaze(
-            faceLandmarks,
-            LEFT_IRIS_INDICES,
-            LEFT_EYE_INNER_INDEX,
-            LEFT_EYE_OUTER_INDEX,
-            LEFT_EYE_UPPER_INDEX,
-            LEFT_EYE_LOWER_INDEX
-          );
-          const rightEyeGaze = getEyeGaze(
-            faceLandmarks,
-            RIGHT_IRIS_INDICES,
-            RIGHT_EYE_INNER_INDEX,
-            RIGHT_EYE_OUTER_INDEX,
-            RIGHT_EYE_UPPER_INDEX,
-            RIGHT_EYE_LOWER_INDEX
-          );
-
-          const gazeSamples = [leftEyeGaze, rightEyeGaze].filter((value): value is { x: number; y: number } =>
-            Boolean(value)
-          );
-
-          if (gazeSamples.length > 0) {
-            const eyeX = gazeSamples.reduce((total, sample) => total + sample.x, 0) / gazeSamples.length;
-            const eyeY = gazeSamples.reduce((total, sample) => total + sample.y, 0) / gazeSamples.length;
-
-            const mirroredX = 1 - eyeX;
-            const amplifiedX = 0.5 + (mirroredX - 0.5) * EYE_AIM_GAIN;
-            const amplifiedY = 0.5 + (eyeY - 0.5) * EYE_AIM_GAIN;
+          const noseCenter = averagePoint(faceLandmarks, NOSE_TRACK_INDICES);
+          if (noseCenter) {
+            const mirroredX = 1 - noseCenter.x;
+            const amplifiedX = 0.5 + (mirroredX - 0.5) * NOSE_AIM_GAIN;
+            const amplifiedY = 0.5 + (noseCenter.y - 0.5) * NOSE_AIM_GAIN;
 
             this.smoothX += (amplifiedX - this.smoothX) * EYE_AIM_SMOOTH_ALPHA;
             this.smoothY += (amplifiedY - this.smoothY) * EYE_AIM_SMOOTH_ALPHA;
