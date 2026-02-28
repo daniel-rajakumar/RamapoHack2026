@@ -1,0 +1,244 @@
+import { CLIENT_SHOT_COOLDOWN_MS, type InputMode, WEBCAM_HEIGHT, WEBCAM_WIDTH } from "./config";
+import { GameEngine } from "./game/engine";
+import { MouseInputController } from "./input/mouse";
+import { createGameSocket } from "./net/socket";
+import "./styles.css";
+import type { MatchEnd } from "./types";
+import { createUI } from "./ui/ui";
+import { HandInputController } from "./vision/hands";
+
+function clamp01(value: number): number {
+  return Math.max(0, Math.min(1, value));
+}
+
+async function startWebcam(videoElement: HTMLVideoElement): Promise<MediaStream> {
+  const stream = await navigator.mediaDevices.getUserMedia({
+    video: {
+      width: { ideal: WEBCAM_WIDTH },
+      height: { ideal: WEBCAM_HEIGHT }
+    },
+    audio: false
+  });
+
+  videoElement.srcObject = stream;
+  await videoElement.play();
+  return stream;
+}
+
+const appRoot = document.querySelector("#app");
+if (!(appRoot instanceof HTMLElement)) {
+  throw new Error("Missing app root");
+}
+
+const ui = createUI(appRoot);
+const socket = createGameSocket();
+
+let roomCode = "";
+let selfPlayerId = "";
+let engine: GameEngine | null = null;
+let handController: HandInputController | null = null;
+let mouseController: MouseInputController | null = null;
+let inputMode: InputMode = "hand";
+let handAvailable = false;
+let isPlaying = false;
+let currentAim = { x: 0.5, y: 0.5 };
+let mediaStream: MediaStream | null = null;
+
+function setAim(x: number, y: number): void {
+  currentAim = { x: clamp01(x), y: clamp01(y) };
+  engine?.setCrosshair(currentAim.x, currentAim.y);
+}
+
+function sendShoot(x = currentAim.x, y = currentAim.y): void {
+  if (!roomCode) {
+    return;
+  }
+  socket.emit("shoot", {
+    roomCode,
+    x: clamp01(x),
+    y: clamp01(y),
+    t: Date.now()
+  });
+}
+
+function applyInputMode(requestedMode: InputMode): void {
+  const mode = requestedMode === "hand" && !handAvailable ? "mouse" : requestedMode;
+  inputMode = mode;
+  ui.setInputMode(mode);
+
+  handController?.setEnabled(mode === "hand");
+  mouseController?.setEnabled(mode === "mouse");
+
+  if (mode === "mouse") {
+    ui.setTrackingStatus(handAvailable ? "Mouse mode active" : "Hand unavailable. Mouse mode active");
+  }
+}
+
+async function ensureRuntimeReady(): Promise<void> {
+  if (!engine) {
+    engine = new GameEngine(ui.getOverlayElement());
+    engine.start();
+    engine.setCrosshair(0.5, 0.5);
+  }
+
+  if (!mouseController) {
+    mouseController = new MouseInputController(
+      ui.getStageElement(),
+      CLIENT_SHOT_COOLDOWN_MS,
+      (x, y) => {
+        if (inputMode !== "mouse") {
+          return;
+        }
+        setAim(x, y);
+      },
+      (x, y) => {
+        if (inputMode !== "mouse") {
+          return;
+        }
+        sendShoot(x, y);
+      }
+    );
+  }
+
+  const video = ui.getVideoElement();
+  if (!mediaStream) {
+    try {
+      mediaStream = await startWebcam(video);
+    } catch {
+      ui.setTrackingStatus("Camera unavailable. Mouse mode active");
+      handAvailable = false;
+      applyInputMode("mouse");
+      return;
+    }
+  }
+
+  if (!handController) {
+    handController = new HandInputController({
+      onAim: (x, y) => {
+        if (inputMode !== "hand") {
+          return;
+        }
+        setAim(x, y);
+      },
+      onShoot: (x, y) => {
+        if (inputMode !== "hand") {
+          return;
+        }
+        sendShoot(x, y);
+      },
+      onStatus: (message) => {
+        if (inputMode === "hand") {
+          ui.setTrackingStatus(message);
+        }
+      }
+    });
+
+    handAvailable = await handController.init();
+    if (handAvailable) {
+      handController.start(video);
+    }
+  }
+
+  applyInputMode(inputMode);
+}
+
+ui.onCreateRoom((name) => {
+  if (!name) {
+    ui.setStatus("Name is required");
+    return;
+  }
+
+  socket.emit("create_room", { name }, (ack) => {
+    if ("error" in ack) {
+      ui.setStatus(`Create failed: ${ack.error}`);
+      return;
+    }
+
+    roomCode = ack.roomCode;
+    selfPlayerId = ack.playerId;
+    ui.setRoomCode(roomCode);
+    ui.setStatus("Room created. Waiting for player 2.");
+    ui.showWaiting();
+  });
+});
+
+ui.onJoinRoom((requestedRoomCode, name) => {
+  if (!name) {
+    ui.setStatus("Name is required");
+    return;
+  }
+
+  socket.emit("join_room", { roomCode: requestedRoomCode, name }, (ack) => {
+    if (!ack.ok) {
+      ui.setStatus(`Join failed: ${ack.error}`);
+      return;
+    }
+
+    roomCode = ack.roomCode;
+    selfPlayerId = ack.playerId;
+    ui.setRoomCode(roomCode);
+    ui.setStatus("Joined room. Starting when both players are ready.");
+    ui.showWaiting();
+  });
+});
+
+ui.onInputModeChange((mode) => {
+  applyInputMode(mode);
+});
+
+socket.on("connect", () => {
+  ui.setStatus("Connected to server");
+});
+
+socket.on("disconnect", () => {
+  ui.setStatus("Disconnected from server");
+});
+
+socket.on("error_event", (payload) => {
+  ui.setStatus(`Error: ${payload.code}`);
+  if (isPlaying) {
+    ui.setTrackingStatus(`Input issue: ${payload.code}`);
+  }
+});
+
+socket.on("room_update", (payload) => {
+  roomCode = payload.roomCode;
+  ui.setRoomCode(payload.roomCode);
+  ui.setWaitingPlayers(payload.players, selfPlayerId);
+  ui.setPlayingPlayers(payload.players, selfPlayerId);
+
+  if (!isPlaying) {
+    ui.showWaiting();
+  }
+});
+
+socket.on("match_start", async () => {
+  isPlaying = true;
+  ui.showPlaying();
+  ui.setTimer(60_000);
+  await ensureRuntimeReady();
+});
+
+socket.on("state_update", (payload) => {
+  ui.setPlayingPlayers(payload.players, selfPlayerId);
+  ui.setTimer(payload.timeRemainingMs);
+  engine?.syncTargets(payload.targets);
+});
+
+socket.on("match_end", (payload: MatchEnd) => {
+  isPlaying = false;
+  ui.showResults(payload, selfPlayerId);
+  ui.setTimer(0);
+  engine?.clearTargets();
+});
+
+window.addEventListener("beforeunload", () => {
+  if (mediaStream) {
+    for (const track of mediaStream.getTracks()) {
+      track.stop();
+    }
+  }
+  handController?.stop();
+  mouseController?.dispose();
+  engine?.dispose();
+});
