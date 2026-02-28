@@ -95,7 +95,7 @@ export function createUI(root: HTMLElement): UIController {
         <div class="form-block">
           <label for="join-room-code">Room Code</label>
           <div class="row">
-            <input id="join-room-code" placeholder="A" maxlength="1" />
+            <input id="join-room-code" placeholder="ABCD" maxlength="4" />
             <button id="join-room" class="gold-btn">Join Room</button>
             <button id="create-room" class="gold-btn">Create Room</button>
           </div>

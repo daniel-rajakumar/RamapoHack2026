@@ -62,8 +62,8 @@ describe("socket integration flow", () => {
     if ("error" in createAck) {
       throw new Error(`create_room failed: ${createAck.error}`);
     }
-    expect(createAck.roomCode).toHaveLength(1);
-    expect(createAck.roomCode).toMatch(/^[A-Z]$/);
+    expect(createAck.roomCode).toHaveLength(4);
+    expect(createAck.roomCode).toMatch(/^[A-Z]{4}$/);
 
     const joinAck = await new Promise<JoinRoomAck>((resolve) => {
       clientB.emit("join_room", { roomCode: createAck.roomCode, name: "Bob" }, (ack: JoinRoomAck) => resolve(ack));

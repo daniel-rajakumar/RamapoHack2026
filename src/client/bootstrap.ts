@@ -123,7 +123,7 @@ export function mountGame(appRoot: HTMLElement): () => void {
     }
   }
 
-  function resetToHomeScreen(): void {
+  function resetToHomeScreen(statusMessage = "Enter name, then create or join."): void {
     roomCode = "";
     selfPlayerId = "";
     isHost = false;
@@ -149,7 +149,7 @@ export function mountGame(appRoot: HTMLElement): () => void {
     ui.setInputMode(selectedRoomInputMode);
     ui.setWaitingPlayers([], undefined, undefined);
     ui.setPlayingPlayers([], undefined, undefined);
-    ui.setStatus("Enter name, then create or join.");
+    ui.setStatus(statusMessage);
     ui.showLobby();
     localAudio.setMenuMusicEnabled(true);
   }
@@ -870,18 +870,8 @@ export function mountGame(appRoot: HTMLElement): () => void {
   });
 
   socket.on("disconnect", () => {
-    ui.setStatus("Disconnected from server");
-    teardownPeerConnection();
-    ui.setRemoteCameraStatus("Disconnected from opponent camera.");
-    isPlaying = false;
-    showingResults = false;
-    engine?.setOpponentCrosshairVisible(false);
     clearMusicProbe();
-    clearStartCountdown();
-    localAudio.setMenuMusicEnabled(true);
-    knownPlayerIds.clear();
-    roomPlayersInitialized = false;
-    lastCountdownSecondSpoken = null;
+    resetToHomeScreen("Disconnected from server. Please create or join a new room.");
   });
 
   socket.on("error_event", (payload) => {

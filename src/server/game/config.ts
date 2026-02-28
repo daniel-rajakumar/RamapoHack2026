@@ -19,13 +19,15 @@ const renderOrigins = [
 
 const DEFAULT_ALLOWED_ORIGINS = [...localDevOrigins, ...renderOrigins];
 
+const configuredOrigins = process.env.CORS_ORIGINS?.split(",").map((origin) => origin.trim()).filter(Boolean);
+
 export const ALLOWED_ORIGINS = (
-  process.env.CORS_ORIGINS?.split(",").map((origin) => origin.trim()).filter(Boolean) ?? DEFAULT_ALLOWED_ORIGINS
+  configuredOrigins && configuredOrigins.length > 0 ? configuredOrigins : DEFAULT_ALLOWED_ORIGINS
 ).filter((origin, index, all) => all.indexOf(origin) === index);
 
 export const ALLOW_ANY_ORIGIN = ALLOWED_ORIGINS.includes("*");
 
-export const ROOM_CODE_LENGTH = 1;
+export const ROOM_CODE_LENGTH = 4;
 export const ROOM_CODE_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
 export const MATCH_DURATION_MS = 60_000;

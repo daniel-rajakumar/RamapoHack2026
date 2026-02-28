@@ -6,8 +6,8 @@ describe("RoomStore", () => {
     const store = new RoomStore();
     const room = store.createRoom("socket-a", "Alice");
 
-    expect(room.roomCode).toHaveLength(1);
-    expect(room.roomCode).toMatch(/^[A-Z]$/);
+    expect(room.roomCode).toHaveLength(4);
+    expect(room.roomCode).toMatch(/^[A-Z]{4}$/);
     expect(room.players.size).toBe(1);
 
     const joinOk = store.joinRoom(room.roomCode, "socket-b", "Bob");
