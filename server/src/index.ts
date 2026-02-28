@@ -1,5 +1,8 @@
 import http from "node:http";
+import { existsSync } from "node:fs";
+import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import cors from "cors";
 import express from "express";
 import helmet from "helmet";
@@ -27,9 +30,26 @@ export function createGameServer() {
     })
   );
 
+  const currentDir = path.dirname(fileURLToPath(import.meta.url));
+  const clientDistPath = path.resolve(currentDir, "../../client/dist");
+  const clientIndexPath = path.join(clientDistPath, "index.html");
+  const hasClientDist = existsSync(clientIndexPath);
+
   app.get("/health", (_req, res) => {
     res.json({ ok: true });
   });
+
+  if (hasClientDist) {
+    app.use(express.static(clientDistPath, { index: false, maxAge: "1h" }));
+
+    app.get("*", (req, res, next) => {
+      if (req.path.startsWith("/socket.io") || req.path === "/health") {
+        next();
+        return;
+      }
+      res.sendFile(clientIndexPath);
+    });
+  }
 
   const httpServer = http.createServer(app);
   const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer, {

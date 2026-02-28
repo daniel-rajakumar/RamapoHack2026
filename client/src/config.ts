@@ -1,4 +1,7 @@
-export const SERVER_URL = import.meta.env.VITE_SERVER_URL ?? "http://localhost:3001";
+const DEFAULT_SERVER_URL =
+  typeof window !== "undefined" && !import.meta.env.DEV ? window.location.origin : "http://localhost:3001";
+
+export const SERVER_URL = import.meta.env.VITE_SERVER_URL ?? DEFAULT_SERVER_URL;
 
 export const CLIENT_SHOT_COOLDOWN_MS = 250;
 export const PINCH_THRESHOLD = 0.05;
