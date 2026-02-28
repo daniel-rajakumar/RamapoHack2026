@@ -2,11 +2,10 @@ services:
   - type: web
     name: gesture-shooter
     env: docker
+    plan: free
     healthCheckPath: /health
     envVars:
       - key: NODE_ENV
         value: production
       - key: HOST
         value: 0.0.0.0
-      - key: CORS_ORIGINS
-        sync: false

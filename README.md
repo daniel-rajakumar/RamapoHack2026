@@ -24,7 +24,7 @@ Open [http://localhost:3000](http://localhost:3000).
 - `HOST`: bind host (default `0.0.0.0`)
 - `CORS_ORIGINS`: comma-separated allowlist for browser origins hitting Socket.IO.
   - Example: `CORS_ORIGINS=https://game.example.com,https://staging.example.com`
-  - Defaults include localhost ports (`3000`, `4173`, `5173`) for local development.
+  - Defaults include localhost ports (`3000`, `4173`, `5173`) and Render's own external URL at runtime.
 - `NEXT_PUBLIC_SERVER_URL` (optional): explicit socket target URL for client.
   - Leave unset for same-origin operation.
 
@@ -39,15 +39,22 @@ npm run start
 docker build -t gesture-shooter .
 docker run --rm -p 3000:3000 \
   -e HOST=0.0.0.0 \
-  -e CORS_ORIGINS=http://localhost:3000 \
   gesture-shooter
 ```
 
 ## Render
 This repo includes [render.yaml](/Users/danielrajakumar/code/RamapoHack2026/render.yaml) for Blueprint deploy.
 
-Required env var on Render:
-- `CORS_ORIGINS=https://<your-render-domain>`
+Deploy directly with:
+- [Render Blueprint Deploy](https://render.com/deploy?repo=https://github.com/daniel-rajakumar/RamapoHack2026)
+
+Manual path:
+1. In Render, click `New` -> `Blueprint`.
+2. Connect `daniel-rajakumar/RamapoHack2026`.
+3. Confirm the free `gesture-shooter` web service and deploy.
+
+Optional hardening after deploy:
+- Set `CORS_ORIGINS=https://<your-render-domain>` in Render env vars.
 
 ## Input modes
 - `Hand`: MediaPipe hand tracking with pinch shoot.

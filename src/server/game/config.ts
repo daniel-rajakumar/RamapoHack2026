@@ -1,7 +1,7 @@
 export const PORT = Number(process.env.PORT ?? 3000);
 export const HOST = process.env.HOST ?? "0.0.0.0";
 
-const DEFAULT_ALLOWED_ORIGINS = [
+const localDevOrigins = [
   "http://localhost:3000",
   "http://127.0.0.1:3000",
   "http://localhost:5173",
@@ -9,6 +9,15 @@ const DEFAULT_ALLOWED_ORIGINS = [
   "http://localhost:4173",
   "http://127.0.0.1:4173"
 ];
+
+const renderExternalHostname = process.env.RENDER_EXTERNAL_HOSTNAME?.trim();
+const renderExternalUrl = process.env.RENDER_EXTERNAL_URL?.trim();
+const renderOrigins = [
+  renderExternalUrl,
+  renderExternalHostname ? `https://${renderExternalHostname}` : undefined
+].filter((origin): origin is string => Boolean(origin));
+
+const DEFAULT_ALLOWED_ORIGINS = [...localDevOrigins, ...renderOrigins];
 
 export const ALLOWED_ORIGINS = (
   process.env.CORS_ORIGINS?.split(",").map((origin) => origin.trim()).filter(Boolean) ?? DEFAULT_ALLOWED_ORIGINS
