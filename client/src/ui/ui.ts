@@ -6,6 +6,7 @@ type ScreenId = "lobby" | "waiting" | "playing" | "results";
 export interface UIController {
   onCreateRoom(handler: (name: string) => void): void;
   onJoinRoom(handler: (roomCode: string, name: string) => void): void;
+  onStartMatch(handler: () => void): void;
   onInputModeChange(handler: (mode: InputMode) => void): void;
   setStatus(message: string): void;
   setRoomCode(roomCode: string): void;
@@ -14,6 +15,7 @@ export interface UIController {
   setTimer(timeRemainingMs: number): void;
   setTrackingStatus(message: string): void;
   setInputMode(mode: InputMode): void;
+  setWaitingControls(params: { isHost: boolean; canStart: boolean; started: boolean; playerCount: number }): void;
   showLobby(): void;
   showWaiting(): void;
   showPlaying(): void;
@@ -27,53 +29,75 @@ function renderPlayers(container: HTMLUListElement, players: PlayerView[], selfI
   container.innerHTML = "";
   for (const player of players) {
     const li = document.createElement("li");
-    li.textContent = `${player.name}${player.id === selfId ? " (You)" : ""}: ${player.score}`;
-    if (player.id === selfId) {
-      li.classList.add("self");
-    }
+    const isSelf = player.id === selfId;
+    li.className = `player-item${isSelf ? " self" : ""}`;
+    li.innerHTML = `
+      <span class="player-name">${player.name}${isSelf ? " <em>(You)</em>" : ""}</span>
+      <span class="player-score">${player.score}</span>
+    `;
     container.appendChild(li);
   }
 }
 
 function formatTimer(ms: number): string {
-  return (Math.max(0, ms) / 1000).toFixed(1);
+  return `${(Math.max(0, ms) / 1000).toFixed(1)}s`;
 }
 
 export function createUI(root: HTMLElement): UIController {
   root.innerHTML = `
     <div class="app-shell">
-      <section id="screen-lobby" class="screen active">
-        <h1>Gesture Shooter MVP</h1>
-        <p>2 players • server authoritative • 60s match</p>
-        <div class="row">
-          <label for="player-name">Name</label>
-          <input id="player-name" placeholder="Enter your name" maxlength="20" />
-          <button id="create-room">Create Room</button>
+      <section id="screen-lobby" class="screen panel active">
+        <div class="panel-header">Mission Setup</div>
+        <h1 class="title">Gesture Shooter</h1>
+        <p class="subtitle">2 players • server-authoritative • fantasy arcade vibe</p>
+
+        <div class="form-block">
+          <label for="player-name">Player Name</label>
+          <div class="row">
+            <input id="player-name" placeholder="Sharpshooter" maxlength="20" />
+          </div>
+          <div class="row">
+            <button id="create-room" class="gold-btn">Create Room</button>
+          </div>
         </div>
-        <div class="row">
+
+        <div class="form-block">
           <label for="join-room-code">Room Code</label>
-          <input id="join-room-code" placeholder="ABC123" maxlength="6" />
-          <button id="join-room">Join Room</button>
+          <div class="row">
+            <input id="join-room-code" placeholder="ABC123" maxlength="6" />
+            <button id="join-room" class="gold-btn">Join Room</button>
+          </div>
         </div>
-        <p class="status" id="lobby-status">Waiting for input.</p>
+
+        <p class="status" id="lobby-status">Enter name, then create or join.</p>
       </section>
 
-      <section id="screen-waiting" class="screen">
-        <h2>Waiting Room</h2>
+      <section id="screen-waiting" class="screen panel">
+        <div class="panel-header">Lobby</div>
+        <h2 class="title small">Waiting Room</h2>
         <p>Room Code: <strong id="waiting-room-code">----</strong></p>
-        <p class="status" id="waiting-status">Share code with player 2.</p>
-        <ul class="players" id="waiting-players"></ul>
+        <p id="waiting-role" class="status">Share the code with player 2.</p>
+        <div class="score-panel">
+          <h3>Party</h3>
+          <ul class="players" id="waiting-players"></ul>
+        </div>
+        <div class="row waiting-actions">
+          <button id="start-match" class="gold-btn wide" disabled>Start Match</button>
+        </div>
+        <p class="status" id="waiting-status">Waiting for players...</p>
       </section>
 
-      <section id="screen-playing" class="screen">
-        <h2>Playing</h2>
+      <section id="screen-playing" class="screen panel">
+        <div class="panel-header">In Match</div>
+        <h2 class="title small">Target Hunt</h2>
         <div id="stage" class="stage">
           <video id="webcam" class="webcam" autoplay playsinline muted></video>
           <div id="overlay-root" class="overlay-root"></div>
+          <div class="stage-frame"></div>
         </div>
         <div class="hud">
           <div class="badge">Room: <strong id="hud-room-code">----</strong></div>
-          <div class="badge">Time: <strong id="hud-timer">60.0</strong>s</div>
+          <div class="badge">Time: <strong id="hud-timer">60.0s</strong></div>
           <div class="badge">Tracking: <strong id="tracking-status">Initializing</strong></div>
           <label class="badge" for="input-mode">
             Input
@@ -83,15 +107,21 @@ export function createUI(root: HTMLElement): UIController {
             </select>
           </label>
         </div>
-        <h3>Scores</h3>
-        <ul class="players" id="hud-players"></ul>
+        <div class="score-panel">
+          <h3>Scoreboard</h3>
+          <ul class="players" id="hud-players"></ul>
+        </div>
       </section>
 
-      <section id="screen-results" class="screen">
-        <h2>Match Results</h2>
+      <section id="screen-results" class="screen panel">
+        <div class="panel-header">Results</div>
+        <h2 class="title small">Match Results</h2>
         <p id="results-title" class="results-title"></p>
-        <p id="results-reason"></p>
-        <ul class="players" id="results-players"></ul>
+        <p id="results-reason" class="status"></p>
+        <div class="score-panel">
+          <h3>Final Scores</h3>
+          <ul class="players" id="results-players"></ul>
+        </div>
       </section>
     </div>
   `;
@@ -107,10 +137,12 @@ export function createUI(root: HTMLElement): UIController {
   const createRoomButton = root.querySelector("#create-room") as HTMLButtonElement;
   const joinRoomInput = root.querySelector("#join-room-code") as HTMLInputElement;
   const joinRoomButton = root.querySelector("#join-room") as HTMLButtonElement;
+  const startMatchButton = root.querySelector("#start-match") as HTMLButtonElement;
   const lobbyStatus = root.querySelector("#lobby-status") as HTMLParagraphElement;
 
   const waitingRoomCode = root.querySelector("#waiting-room-code") as HTMLElement;
   const waitingStatus = root.querySelector("#waiting-status") as HTMLElement;
+  const waitingRole = root.querySelector("#waiting-role") as HTMLElement;
   const waitingPlayers = root.querySelector("#waiting-players") as HTMLUListElement;
 
   const hudRoomCode = root.querySelector("#hud-room-code") as HTMLElement;
@@ -144,6 +176,11 @@ export function createUI(root: HTMLElement): UIController {
         handler(joinRoomInput.value.trim().toUpperCase(), playerNameInput.value.trim());
       });
     },
+    onStartMatch(handler) {
+      startMatchButton.addEventListener("click", () => {
+        handler();
+      });
+    },
     onInputModeChange(handler) {
       inputMode.addEventListener("change", () => {
         const mode = inputMode.value === "mouse" ? "mouse" : "hand";
@@ -173,6 +210,22 @@ export function createUI(root: HTMLElement): UIController {
     setInputMode(mode) {
       inputMode.value = mode;
     },
+    setWaitingControls({ isHost, canStart, started, playerCount }) {
+      startMatchButton.disabled = !canStart;
+      if (started) {
+        startMatchButton.textContent = "Match Starting...";
+      } else if (isHost) {
+        startMatchButton.textContent = playerCount >= 2 ? "Start Match" : "Need 2 Players";
+      } else {
+        startMatchButton.textContent = "Host Starts Match";
+      }
+
+      if (isHost) {
+        waitingRole.textContent = playerCount >= 2 ? "You are the host. Start when ready." : "You are the host. Waiting for player 2.";
+      } else {
+        waitingRole.textContent = "Waiting for host to start the match.";
+      }
+    },
     showLobby() {
       setActiveScreen("lobby");
     },
@@ -191,7 +244,7 @@ export function createUI(root: HTMLElement): UIController {
         resultsTitle.classList.remove("danger");
       } else if (winner) {
         const isSelf = winner.id === selfId;
-        resultsTitle.textContent = isSelf ? "You win" : `${winner.name} wins`;
+        resultsTitle.textContent = isSelf ? "Victory" : `${winner.name} Wins`;
         resultsTitle.classList.toggle("danger", !isSelf);
       } else {
         resultsTitle.textContent = "Match ended";

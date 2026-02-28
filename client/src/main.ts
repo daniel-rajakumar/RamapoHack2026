@@ -41,6 +41,7 @@ let mouseController: MouseInputController | null = null;
 let inputMode: InputMode = "hand";
 let handAvailable = false;
 let isPlaying = false;
+let isHost = false;
 let currentAim = { x: 0.5, y: 0.5 };
 let mediaStream: MediaStream | null = null;
 
@@ -156,9 +157,11 @@ ui.onCreateRoom((name) => {
 
     roomCode = ack.roomCode;
     selfPlayerId = ack.playerId;
+    isHost = true;
     ui.setRoomCode(roomCode);
     ui.setStatus("Room created. Waiting for player 2.");
     ui.showWaiting();
+    ui.setWaitingControls({ isHost: true, canStart: false, started: false, playerCount: 1 });
   });
 });
 
@@ -176,14 +179,30 @@ ui.onJoinRoom((requestedRoomCode, name) => {
 
     roomCode = ack.roomCode;
     selfPlayerId = ack.playerId;
+    isHost = false;
     ui.setRoomCode(roomCode);
-    ui.setStatus("Joined room. Starting when both players are ready.");
+    ui.setStatus("Joined room. Waiting for host to start.");
     ui.showWaiting();
+    ui.setWaitingControls({ isHost: false, canStart: false, started: false, playerCount: 1 });
   });
 });
 
 ui.onInputModeChange((mode) => {
   applyInputMode(mode);
+});
+
+ui.onStartMatch(() => {
+  if (!roomCode) {
+    return;
+  }
+
+  socket.emit("start_match", { roomCode }, (ack) => {
+    if (!ack.ok) {
+      ui.setStatus(`Start failed: ${ack.error}`);
+      return;
+    }
+    ui.setStatus("Match is starting...");
+  });
 });
 
 socket.on("connect", () => {
@@ -203,9 +222,26 @@ socket.on("error_event", (payload) => {
 
 socket.on("room_update", (payload) => {
   roomCode = payload.roomCode;
+  isHost = payload.hostId === selfPlayerId;
   ui.setRoomCode(payload.roomCode);
   ui.setWaitingPlayers(payload.players, selfPlayerId);
   ui.setPlayingPlayers(payload.players, selfPlayerId);
+  ui.setWaitingControls({
+    isHost,
+    canStart: isHost && payload.players.length >= 2 && !payload.started,
+    started: payload.started,
+    playerCount: payload.players.length
+  });
+
+  if (!payload.started && !isPlaying) {
+    if (isHost && payload.players.length < 2) {
+      ui.setStatus("Waiting for player 2 to join.");
+    } else if (isHost) {
+      ui.setStatus("Both players joined. Press Start Match.");
+    } else {
+      ui.setStatus("Waiting for host to start the match.");
+    }
+  }
 
   if (!isPlaying) {
     ui.showWaiting();

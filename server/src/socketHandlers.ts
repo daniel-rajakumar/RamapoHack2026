@@ -24,7 +24,9 @@ function emitRoomUpdate(io: IoServer, roomCode: string, roomStore: RoomStore): v
 
   io.to(roomCode).emit("room_update", {
     roomCode,
-    players: toPlayerViews(room)
+    players: toPlayerViews(room),
+    hostId: room.hostSocketId,
+    started: room.started
   });
 }
 
@@ -105,10 +107,50 @@ export function setupSocketHandlers(io: IoServer, roomStore: RoomStore): void {
       socket.join(roomCode);
       cb?.({ ok: true, roomCode, playerId: socket.id });
       emitRoomUpdate(io, roomCode, roomStore);
+    });
 
-      if (joined.room.players.size === 2) {
-        startMatch(io, joined.room);
+    socket.on("start_match", (payload, cb) => {
+      const roomCode = normalizeRoomCode(payload?.roomCode);
+      if (!roomCode) {
+        emitError(io, socket.id, "ROOM_NOT_FOUND");
+        cb?.({ ok: false, error: "ROOM_NOT_FOUND" });
+        return;
       }
+
+      const room = roomStore.getRoom(roomCode);
+      if (!room) {
+        emitError(io, socket.id, "ROOM_NOT_FOUND");
+        cb?.({ ok: false, error: "ROOM_NOT_FOUND" });
+        return;
+      }
+
+      if (!room.players.has(socket.id)) {
+        emitError(io, socket.id, "ROOM_NOT_FOUND");
+        cb?.({ ok: false, error: "ROOM_NOT_FOUND" });
+        return;
+      }
+
+      if (room.hostSocketId !== socket.id) {
+        emitError(io, socket.id, "NOT_HOST");
+        cb?.({ ok: false, error: "NOT_HOST" });
+        return;
+      }
+
+      if (room.started) {
+        emitError(io, socket.id, "MATCH_ALREADY_STARTED");
+        cb?.({ ok: false, error: "MATCH_ALREADY_STARTED" });
+        return;
+      }
+
+      if (room.players.size < 2) {
+        emitError(io, socket.id, "NOT_ENOUGH_PLAYERS");
+        cb?.({ ok: false, error: "NOT_ENOUGH_PLAYERS" });
+        return;
+      }
+
+      startMatch(io, room);
+      emitRoomUpdate(io, roomCode, roomStore);
+      cb?.({ ok: true });
     });
 
     socket.on("shoot", (payload) => {

@@ -6,6 +6,7 @@ import type {
   CreateRoomAck,
   JoinRoomAck,
   MatchEnd,
+  StartMatchAck,
   ServerToClientEvents,
   StateUpdate
 } from "../types.js";
@@ -72,7 +73,16 @@ describe("socket integration flow", () => {
       throw new Error(`join_room failed: ${joinAck.error}`);
     }
 
-    await waitForEvent(clientA, "match_start");
+    const matchStartPromise = waitForEvent(clientA, "match_start");
+    const startAck = await new Promise<StartMatchAck>((resolve) => {
+      clientA.emit("start_match", { roomCode: createAck.roomCode }, (ack: StartMatchAck) => resolve(ack));
+    });
+    expect(startAck.ok).toBe(true);
+    if (!startAck.ok) {
+      throw new Error(`start_match failed: ${startAck.error}`);
+    }
+
+    await matchStartPromise;
     const state = (await waitForEvent(clientA, "state_update")) as StateUpdate;
     expect(state.targets.length).toBeGreaterThan(0);
 

@@ -5,7 +5,10 @@ export type ErrorCode =
   | "MATCH_NOT_STARTED"
   | "MATCH_ENDED"
   | "INVALID_SHOT"
-  | "RATE_LIMITED";
+  | "RATE_LIMITED"
+  | "NOT_HOST"
+  | "NOT_ENOUGH_PLAYERS"
+  | "MATCH_ALREADY_STARTED";
 
 export type PlayerView = { id: string; name: string; score: number };
 export type TargetView = { id: number; x: number; y: number; r: number };
@@ -13,13 +16,15 @@ export type TargetView = { id: number; x: number; y: number; r: number };
 export type CreateRoomReq = { name: string };
 export type JoinRoomReq = { roomCode: string; name: string };
 export type ShootReq = { roomCode: string; x: number; y: number; t?: number };
+export type StartMatchReq = { roomCode: string };
 
 export type CreateRoomAck = { roomCode: string; playerId: string } | { error: ErrorCode };
 export type JoinRoomAck =
   | { ok: true; roomCode: string; playerId: string }
   | { ok: false; error: ErrorCode };
+export type StartMatchAck = { ok: true } | { ok: false; error: ErrorCode };
 
-export type RoomUpdate = { roomCode: string; players: PlayerView[] };
+export type RoomUpdate = { roomCode: string; players: PlayerView[]; hostId: string; started: boolean };
 export type MatchStart = { roomCode: string; startTime: number; durationMs: number };
 export type StateUpdate = {
   roomCode: string;
@@ -54,6 +59,7 @@ export interface ServerToClientEvents {
 export interface ClientToServerEvents {
   create_room: (payload: CreateRoomReq, cb?: (response: CreateRoomAck) => void) => void;
   join_room: (payload: JoinRoomReq, cb?: (response: JoinRoomAck) => void) => void;
+  start_match: (payload: StartMatchReq, cb?: (response: StartMatchAck) => void) => void;
   shoot: (payload: ShootReq) => void;
 }
 

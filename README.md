@@ -39,6 +39,7 @@ Open `http://localhost:5173`.
 VITE_SERVER_URL=http://192.168.1.42:3001 npm run dev
 ```
 4. Create room on one laptop and join from the other.
+5. Host clicks `Start Match` from the waiting room.
 
 ## Tests
 ```bash
