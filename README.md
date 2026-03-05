@@ -2,18 +2,20 @@
 
 2-player webcam shooter with hand/eye gesture controls, real-time multiplayer, and server-authoritative scoring.
 
-<img src="docs/screenshots/logo.png" alt="bubble poppAR logo" width="180" />
+Inspired by: [Instagram Reel](https://www.instagram.com/reel/DSaUZYuD4QY/?igsh=MXJ5dXlwNDlwbmF5Mg==)
+
+<img src="public/screenshots/logo.png" alt="bubble poppAR logo" width="180" />
 
 - Demo: [https://ramapohack2026.onrender.com](https://ramapohack2026.onrender.com)
 - Stack: Next.js + React + TypeScript + Express + Socket.IO + Three.js + MediaPipe
 
 ## Screenshots
 
-![Game Thumbnail](docs/screenshots/thumbnail.png)
+![Mission Setup](public/screenshots/mission-setup.png)
 
-| Gameplay 1 | Gameplay 2 |
+| Waiting Room | Gameplay |
 | --- | --- |
-| ![Gameplay 1](docs/screenshots/gameplay-01.png) | ![Gameplay 2](docs/screenshots/gameplay-02.png) |
+| ![Waiting Room](public/screenshots/waiting-room.png) | ![Gameplay](public/screenshots/gameplay.png) |
 
 ## Core Features
 
