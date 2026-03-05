@@ -1,139 +1,123 @@
-# bubble poppAR
+<div align="center">
+  <img src="public/screenshots/logo.png" alt="bubble poppAR logo" width="200" />
 
-2-player webcam shooter with hand/eye gesture controls, real-time multiplayer, and server-authoritative scoring.
+  # 🫧 bubble poppAR
 
-Inspired by: [Instagram Reel](https://www.instagram.com/reel/DSaUZYuD4QY/?igsh=MXJ5dXlwNDlwbmF5Mg==)
+  **2-player webcam shooter with hand/eye gesture controls, real-time multiplayer, and server-authoritative scoring.**
 
-<img src="public/screenshots/logo.png" alt="bubble poppAR logo" width="180" />
+  [![Next.js](https://img.shields.io/badge/Next.js-15-black?style=for-the-badge&logo=next.js)](https://nextjs.org/)
+  [![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?style=for-the-badge&logo=typescript)](https://www.typescriptlang.org/)
+  [![Socket.io](https://img.shields.io/badge/Socket.io-4-black?style=for-the-badge&logo=socket.io)](https://socket.io/)
+  [![Three.js](https://img.shields.io/badge/Three.js-black?style=for-the-badge&logo=three.js)](https://threejs.org/)
+  [![MediaPipe](https://img.shields.io/badge/MediaPipe-Vision-white?style=for-the-badge&logo=google)](https://mediapipe.dev/)
 
-- Demo: [https://ramapohack2026.onrender.com](https://ramapohack2026.onrender.com)
-- Stack: Next.js + React + TypeScript + Express + Socket.IO + Three.js + MediaPipe
+  [🚀 Live Demo](https://ramapohack2026.onrender.com) • [🎥 Inspiration](https://www.instagram.com/reel/DSaUZYuD4QY/?igsh=MXJ5dXlwNDlwbmF5Mg==)
+</div>
 
-## Screenshots
+---
 
+## ✨ Features
+
+- 🎮 **Real-time Multiplayer**: 2-player room system with high-speed synchronization.
+- 🤏 **Hand Tracking**: Pinch your fingers to blast away your opponent!
+- 👁️ **Eye Tracking**: Blink both eyes for a hands-free shooting experience.
+- ⚡ **Authoritative Scoring**: No cheating! The server handles all hit detection and game state.
+- 🔊 **Voice Callouts**: Dynamic AI-powered voice lines using ElevenLabs.
+- 📹 **WebRTC Feed**: See your opponent's camera feed in real-time as you play.
+
+## 📸 Guided Tour
+
+### 🎯 Mission Setup
+The command center where you prepare for battle.
 ![Mission Setup](public/screenshots/mission-setup.png)
 
-| Waiting Room | Gameplay |
-| --- | --- |
-| ![Waiting Room](public/screenshots/waiting-room.png) | ![Gameplay](public/screenshots/gameplay.png) |
+<div align="center">
+  <table>
+    <tr>
+      <td width="50%"><b>🤝 Waiting Room</b></td>
+      <td width="50%"><b>🚀 Gameplay</b></td>
+    </tr>
+    <tr>
+      <td><img src="public/screenshots/waiting-room.png" alt="Waiting Room" /></td>
+      <td><img src="public/screenshots/gameplay.png" alt="Gameplay" /></td>
+    </tr>
+  </table>
+</div>
 
-## Core Features
+---
 
-- 2-player real-time room system with **4-letter room codes**
-- Server-authoritative match state and hit scoring
-- Input modes:
-  - Hand tracking (pinch to shoot)
-  - Eye tracking (blink to shoot)
-  - Mouse fallback
-- Live opponent camera feed (WebRTC)
-- Match countdown, scoreboard, winner/tie resolution
-- Optional server-side ElevenLabs voice callouts
+## 🛠️ Tech Stack
 
-## Tech Stack
+- **Frontend**: `Next.js 15` • `React 19` • `TypeScript`
+- **Graphics**: `Three.js` (WebGL Rendering)
+- **Computer Vision**: `@mediapipe/tasks-vision`
+- **Networking**: `Socket.IO` (Real-time) • `WebRTC` (Camera Feed)
+- **Backend**: `Express` (Node.js) • `ElevenLabs` (Voice AI)
+- **Infrastructure**: Docker • Render Blueprint
 
-- Frontend: `Next.js 15`, `React 19`, `TypeScript`
-- Rendering: `Three.js`
-- Vision: `@mediapipe/tasks-vision`
-- Backend: `Express` + `Socket.IO`
-- Security middleware: `helmet`, `cors`
-- Runtime: `Node.js 20+`
-- Deployment: Docker + Render Blueprint
+---
 
-## Quick Start
+## 🚀 Quick Start
 
 ### 1. Requirements
-
 - Node.js `20+`
 - npm `10+`
 
-### 2. Install
-
+### 2. Setup & Installation
 ```bash
+# Clone the repository
+git clone https://github.com/daniel-rajakumar/RamapoHack2026.git
+cd RamapoHack2026
+
+# Install dependencies
 npm install
+
+# Prepare MediaPipe models
 npm run setup:mediapipe
 ```
 
-### 3. Run (dev)
-
+### 3. Run Locally
 ```bash
+# Start development server
 npm run dev
 ```
+Open [http://localhost:3000](http://localhost:3000) to start popping!
 
-Open [http://localhost:3000](http://localhost:3000).
+---
 
-### 4. Build + production run
+## 🎮 Controls
 
-```bash
-npm run build
-npm run start
-```
+| Mode | Action | Gesture |
+| :--- | :--- | :--- |
+| 🖐️ **Hand** | Aim & Shoot | Move hand to aim, **pinch** (index + thumb) to shoot |
+| 👁️ **Eye** | Aim & Shoot | Move face to aim, **blink both eyes** to shoot |
+| 🖱️ **Mouse** | Aim & Shoot | Move mouse to aim, **click** to shoot |
 
-## Environment Variables
+---
 
-| Variable | Required | Description |
-| --- | --- | --- |
-| `PORT` | No | Server port (default `3000`) |
-| `HOST` | No | Bind host (default `0.0.0.0`) |
-| `CORS_ORIGINS` | No | Comma-separated browser origin allowlist |
-| `NEXT_PUBLIC_SERVER_URL` | No | Explicit socket server URL for client |
-| `ELEVENLABS_API_KEY` | No | Enables server-side TTS voice lines |
-| `ELEVENLABS_VOICE_ID` | No | Voice ID for ElevenLabs |
-| `ELEVENLABS_MODEL_ID` | No | Model ID (default `eleven_multilingual_v2`) |
-
-## Controls
-
-- **Hand mode**: move hand to aim, pinch to shoot
-- **Eye mode**: move face to aim, blink both eyes to shoot
-- **Mouse mode**: move cursor to aim, click to shoot
-
-## Multiplayer Flow
-
-1. Player 1 creates a room.
-2. Player 2 joins with the room code.
-3. Host chooses input mode + duration and starts match.
-4. Server runs authoritative state updates and scoring.
-5. Winner is decided by score at timeout (or by forfeit if a player leaves).
-
-## Project Structure
+## 📂 Project Structure
 
 ```text
 app/                      # Next.js app shell
 src/client/               # Browser runtime (UI, vision, game engine, socket client)
-src/server/game/          # Game server logic (rooms, validation, match loop, socket handlers)
-public/                   # Static assets (audio, MediaPipe files)
+src/server/game/          # Game server logic (rooms, validation, match loop)
+public/                   # Static assets (audio, MediaPipe files, screenshots)
 server.ts                 # Next + Express + Socket.IO server entrypoint
-render.yaml               # Render Blueprint config
-Dockerfile                # Container build
+render.yaml               # Deployment config
 ```
 
-## Deployment
+---
 
-### Render
+## 🏗️ Future Roadmap
 
-This repo includes `render.yaml` for one-click Blueprint deployment.
+- [ ] **Persistent Profiles**: Global leaderboards and matchmaking history.
+- [ ] **Reconnect Logic**: Resume matches automatically after a disconnect.
+- [ ] **Anti-Cheat**: Server-side replay validation for perfect competitive integrity.
+- [ ] **Spectator Mode**: Allow others to watch the battle in real-time.
+- [ ] **Tournament Brackets**: Integrated bracket support for hackathon events.
 
-### Docker
+---
 
-```bash
-docker build -t bubble-poppar .
-docker run --rm -p 3000:3000 -e HOST=0.0.0.0 bubble-poppar
-```
-
-## MVP Notes
-
-This project is optimized for hackathon delivery:
-
-- In-memory room storage (no DB)
-- 2-player rooms only
-- Fast fallback path to mouse mode when camera/vision fails
-
-For scaling beyond MVP, see improvement ideas in the section below.
-
-## Improvement Ideas (Post-Hackathon)
-
-- Add persistent profiles, matchmaking, and room history (database-backed)
-- Add reconnect + session resume instead of forcing room rejoin on disconnect
-- Add anti-cheat telemetry and replay validation for shot events
-- Add spectator mode and tournament brackets
-- Add CI: lint, typecheck, unit/integration test jobs
-- Add runtime observability (structured logs, traces, metrics)
+<div align="center">
+  Made with ❤️ for RamapoHack 2026
+</div>
