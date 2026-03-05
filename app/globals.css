@@ -237,6 +237,7 @@ input {
   color: #ffe8b0;
   font-weight: 700;
   text-shadow: 0 1px 0 var(--ink-shadow);
+  margin-left: 0.5rem;
 }
 
 .camera-test-stage {
